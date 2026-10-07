@@ -30,7 +30,7 @@ export function createDaemonServiceDescriptor(options: {
       options.platform === "win32" ? "zcode.cmd" : "zcode",
     ),
     args: ["serve", "--supervisor", "--service-entry", "--server-root", options.layout.serverRoot],
-    name: `com.zhipu.zcode.server.${stablePathId(options.layout.serverRoot)}`,
+    name: `dev.openzcode.app.server.${stablePathId(options.layout.serverRoot)}`,
   });
 }
 
@@ -46,7 +46,7 @@ export function createServiceDescriptor(options: {
   args?: string[];
   name?: string;
 }): ServiceDescriptor {
-  const name = options.name ?? "com.zhipu.zcode.server";
+  const name = options.name ?? "dev.openzcode.app.server";
   const args = options.args ?? ["serve", "--daemon"];
   if (options.platform === "darwin") {
     return {

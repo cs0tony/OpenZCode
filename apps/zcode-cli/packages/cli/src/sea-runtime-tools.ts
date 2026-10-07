@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { chmod, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
+import { OPEN_ZCODE_DATA_DIR_NAME } from "@zcode/shared";
 import { getRuntimeToolRuntime, type RuntimeToolId } from "@zcode/shared/runtime-tool-runtime";
 
 type CliEnv = Record<string, string | undefined>;
@@ -66,7 +67,7 @@ export async function ensureSeaRuntimeTools(
 
   const env = options.env ?? process.env;
   const configuredStorageRoot = options.storageRoot ?? env.ZCODE_STORAGE_DIR?.trim();
-  const storageRoot = configuredStorageRoot || join(homedir(), ".zcode");
+  const storageRoot = configuredStorageRoot || join(homedir(), OPEN_ZCODE_DATA_DIR_NAME);
   const runtimeEnv: CliEnv = {};
 
   for (const tool of manifest.tools) {

@@ -14,6 +14,7 @@ import {
 } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import { OPEN_ZCODE_DATA_DIR_NAME } from "@zcode/shared";
 import type {
   PluginSyncCandidate,
   PluginSyncComponentType,
@@ -217,11 +218,11 @@ function resolveUserHomeDir(): string {
 }
 
 function getUserZcodeConfigPath(): string {
-  return join(resolveUserHomeDir(), ".zcode", "cli", "config.json");
+  return join(resolveUserHomeDir(), OPEN_ZCODE_DATA_DIR_NAME, "cli", "config.json");
 }
 
 function getUserZcodePluginRoot(): string {
-  return join(resolveUserHomeDir(), ".zcode", "plugins");
+  return join(resolveUserHomeDir(), OPEN_ZCODE_DATA_DIR_NAME, "plugins");
 }
 
 async function collectLocalUserPluginCandidates(): Promise<PluginSyncCandidate[]> {

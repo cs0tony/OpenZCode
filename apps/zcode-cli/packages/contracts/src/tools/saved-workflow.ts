@@ -7,6 +7,7 @@
 // 源运行）都以它为契约，core 侧的 store 也从这里取 schema——元数据形状一旦在写侧与读侧
 // 各自演化，症状是「刚保存的 workflow 列不出来」，而那是最难被单侧测试抓住的一类分叉。
 
+import { OPEN_ZCODE_DATA_DIR_NAME } from "@zcode/shared";
 import { z } from "zod";
 
 /**
@@ -25,10 +26,11 @@ export const SAVED_WORKFLOW_PROJECT_DIR = ".zcode/workflows";
 export const WORKFLOW_DRAFTS_DIR = ".zcode/workflow-drafts";
 
 /**
- * 全局作用域的存放目录（相对 agent 进程的家目录）。落点 `~/.zcode/workflows/<name>.dwf.ts`
+ * 全局作用域的存放目录（相对 agent 进程的家目录）。落点 `~/.openzcode/workflows/<name>.dwf.ts`
  * ——与 legacy Workflow 工具的用户根同一处，对所有项目可见。
  */
-export const SAVED_WORKFLOW_GLOBAL_DIR = ".zcode/workflows";
+/** 全局档随 OpenZCode 走隔离目录（官方 ZCode 为 `.zcode/workflows`）。 */
+export const SAVED_WORKFLOW_GLOBAL_DIR = `${OPEN_ZCODE_DATA_DIR_NAME}/workflows`;
 
 /**
  * 名字的合法形状。与旧 `Workflow` 工具的解析器同一条模式（script-workflow-tool-port.ts）——
@@ -42,7 +44,7 @@ export const SAVED_WORKFLOW_MAX_NAME_CHARS = 64;
 
 /**
  * 作用域。两档：`project` 落在项目的 `.zcode/workflows/`，只在那个项目里可见；`global`
- * 落在 `~/.zcode/workflows/`（agent 进程的家目录），对所有项目可见。一个文件的作用域由它所在的目录推得，frontmatter 不存。
+ * 落在 `~/.openzcode/workflows/`（agent 进程的家目录），对所有项目可见。一个文件的作用域由它所在的目录推得，frontmatter 不存。
  */
 export const SAVED_WORKFLOW_SCOPES = ["project", "global"] as const;
 

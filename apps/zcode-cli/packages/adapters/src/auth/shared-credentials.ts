@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import { OPEN_ZCODE_DATA_DIR_NAME } from "@zcode/shared";
 import { atomicWritePrivateTextFile, backupCorruptFile, withFileLock } from "@zcode/shared/node";
 import { createZCodeCredentialCipher, type ZCodeCredentialCipher } from "./credential-cipher.js";
 
@@ -286,7 +287,7 @@ export function resolveSharedZCodeCredentialsPath(
 
   const env = options.env ?? process.env;
   const baseDir = options.baseDir ?? env[ZCODE_DATA_BASE_DIR_ENV_KEY] ?? homedir();
-  return join(resolveUserPath(baseDir), ".zcode", "v2", "credentials.json");
+  return join(resolveUserPath(baseDir), OPEN_ZCODE_DATA_DIR_NAME, "v2", "credentials.json");
 }
 
 async function readRawCredentialRecord(filePath: string): Promise<Record<string, string>> {

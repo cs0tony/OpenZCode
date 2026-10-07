@@ -1,10 +1,12 @@
 import type { IRemoteBackend, RemoteUploadOptions } from "@zcode/server/remote";
 import { quotePosixPathArg } from "@zcode/server/remote/posixShell.js";
+import { OPEN_ZCODE_DATA_DIR_NAME } from "@zcode/shared";
 import type { TraceId, ZCodePromptAttachment } from "@zcode/shared";
 import { randomUUID } from "node:crypto";
 
-const REMOTE_PROMPT_ATTACHMENT_ROOT = "~/.zcode/tmp/prompt-attachments";
-const REMOTE_PROMPT_ATTACHMENT_RELATIVE_ROOT = ".zcode/tmp/prompt-attachments";
+// 远端宿主上 OpenZCode 用户级附件根；与官方 ZCode 的 ~/.zcode 隔离。
+const REMOTE_PROMPT_ATTACHMENT_ROOT = `~/${OPEN_ZCODE_DATA_DIR_NAME}/tmp/prompt-attachments`;
+const REMOTE_PROMPT_ATTACHMENT_RELATIVE_ROOT = `${OPEN_ZCODE_DATA_DIR_NAME}/tmp/prompt-attachments`;
 
 interface RemotePromptAttachmentMaterializeInput {
   taskId?: string;

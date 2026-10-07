@@ -34,7 +34,11 @@ function defaultCredentialSecret(env: NodeJS.ProcessEnv): string {
     // 部分运行环境可能拿不到系统用户，失败时退回默认占位值。
   }
 
-  return `zcode-credential-fallback:${platform()}:${homedir()}:${username}`;
+  // 桌面端与 CLI 适配层（adapters/src/auth/credential-cipher.ts）读写同一份
+  // ~/.openzcode/v2/credentials.json，双方 fallback key 必须逐字一致，否则一侧加密的
+  // 凭据另一侧解不开；同时弃用官方 ZCode 的 zcode-credential-fallback 前缀，
+  // 保证两个产品在异常路径下也不能互相解密（见 specs/environment-isolation-from-zcode.md）。
+  return `openzcode-credential-fallback:${platform()}:${homedir()}:${username}`;
 }
 
 function base64urlToBuffer(raw: string): Buffer {

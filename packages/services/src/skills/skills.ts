@@ -22,13 +22,13 @@ export interface ISkillsService {
     provider?: ZCodeProvider;
     prompt: string;
   }): Promise<SkillsPromptContext>;
-  /** 将指定 skill 复制到通用目录（.zcode/skills），成功后返回新 skill 的路径。 */
+  /** 将指定 skill 复制到用户级通用目录（~/.openzcode/skills），成功后返回新 skill 的路径。 */
   copyToCommon(params: {
     workspacePath: string;
     workspaceIdentity?: string;
     skillId: string;
   }): Promise<{ newPath: string }>;
-  /** 从通用目录中移除指定 skill（仅当 skill 位于 .zcode/skills 时有效）。 */
+  /** 从用户级通用目录中移除指定 skill（仅当 skill 位于 ~/.openzcode/skills 时有效）。 */
   removeFromCommon(params: {
     workspacePath: string;
     workspaceIdentity?: string;

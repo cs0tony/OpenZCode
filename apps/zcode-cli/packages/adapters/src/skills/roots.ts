@@ -1,13 +1,16 @@
 import { stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
+import { OPEN_ZCODE_DATA_DIR_NAME } from "@zcode/shared";
 import type { SkillRoot, SkillSource } from "@zcode/contracts";
 
 const GIT_MARKER = ".git";
 const HOME_PREFIX = "~/";
 const PRIORITY_STEP = 10;
 const SKILLS_DIR = "skills";
-const ZCODE_DIR = ".zcode";
+// 用户级走 OpenZCode 隔离目录；项目级 `.zcode` 是工作区工件，跨产品共享。
+const USER_ZCODE_DIR = OPEN_ZCODE_DATA_DIR_NAME;
+const PROJECT_ZCODE_DIR = ".zcode";
 const AGENTS_DIR = ".agents";
 
 export interface SkillRootResolutionOptions {
@@ -96,10 +99,11 @@ function skillRootsForBase(
   scope: SkillRoot["scope"],
   nextPriority: () => number,
 ): SkillRoot[] {
+  const zcodeDirName = scope === "user" ? USER_ZCODE_DIR : PROJECT_ZCODE_DIR;
   // 合并而不是 fallback：用户可能同时安装原生 `.zcode` skill 和兼容 `.agents` skill。
   // 同一级别仍保持 `.zcode` 优先，后续同名按 root 顺序解析。
   return [
-    root(join(baseDirectory, ZCODE_DIR, SKILLS_DIR), scope, "zcode", nextPriority()),
+    root(join(baseDirectory, zcodeDirName, SKILLS_DIR), scope, "zcode", nextPriority()),
     root(join(baseDirectory, AGENTS_DIR, SKILLS_DIR), scope, "agents", nextPriority()),
   ];
 }

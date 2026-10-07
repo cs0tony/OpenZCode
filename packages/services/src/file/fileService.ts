@@ -10,7 +10,7 @@ import type {
   FileTextSlice,
   WorkspaceFileEntry,
 } from "@zcode/shared";
-import { getMediaPreviewFormat } from "@zcode/shared";
+import {  getMediaPreviewFormat, OPEN_ZCODE_SCRATCH_WORKSPACE_DIR_NAME } from "@zcode/shared";
 import { packWorkspaceFileEntries } from "@zcode/shared/workspaceFileEntriesCodec";
 import type { IFileService, WorkspaceFileSearchParams } from "./file.js";
 import { WORKSPACE_FILE_SEARCH_DISPLAY_CAP } from "@zcode/shared/workspaceFileSearch";
@@ -101,7 +101,8 @@ function isProbablyBinary(buffer: Buffer): boolean {
   }
   return suspiciousBytes / buffer.length > 0.3;
 }
-const SCRATCH_WORKSPACE_ROOT_NAME = "ZCodeProject";
+// OpenZCode scratch 工作区名与官方 ZCode 的 ZCodeProject 隔离。
+const SCRATCH_WORKSPACE_ROOT_NAME = OPEN_ZCODE_SCRATCH_WORKSPACE_DIR_NAME;
 function validateScratchWorkspaceName(name: string): string {
   const trimmedName = name.trim();
   if (!trimmedName) {

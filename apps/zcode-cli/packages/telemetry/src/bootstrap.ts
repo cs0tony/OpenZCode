@@ -225,7 +225,8 @@ async function resolveStandaloneDeviceMid(
 ): Promise<string | undefined> {
   const stateFile = zcodeHome
     ? join(zcodeHome, "v2", "telemetry-state.json")
-    : join(homedir(), ".zcode", "v2", "telemetry-state.json");
+    // OpenZCode 隔离目录；与 packages/shared/src/open-zcode-dirs.ts 的 OPEN_ZCODE_DATA_DIR_NAME 常量保持一致。
+    : join(homedir(), ".openzcode", "v2", "telemetry-state.json");
   const pending = pendingStandaloneDeviceMidByStateFile.get(stateFile);
   if (pending) return pending;
   const resolution = resolveStandaloneDeviceMidFromFile(stateFile);

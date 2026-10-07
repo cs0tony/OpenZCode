@@ -1,5 +1,6 @@
 // Config Port - Scoped configuration with change notification
 
+import { OPEN_ZCODE_DATA_DIR_NAME } from "@zcode/shared";
 import type { CollaborationMode } from "../interfaces/session.port.js";
 import type { McpServerConfig } from "../interfaces/mcp.port.js";
 import type { HooksRuntimeConfig, HooksRuntimeConfigPatch } from "../hooks/index.js";
@@ -299,8 +300,8 @@ export const DefaultRuntimeConfig: RuntimeConfig = {
     allowMediumRiskInAuto: false,
   },
   storage: {
-    dir: "~/.zcode",
-    sessionDbPath: "~/.zcode/cli/db/db.sqlite",
+    dir: `~/${OPEN_ZCODE_DATA_DIR_NAME}`,
+    sessionDbPath: `~/${OPEN_ZCODE_DATA_DIR_NAME}/cli/db/db.sqlite`,
   },
   network: {
     timeout: 180000,

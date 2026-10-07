@@ -4,7 +4,10 @@ import { cp } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { basename, join, win32 } from "node:path";
 import { homedir } from "node:os";
-import { DATA_BASE_DIR_FORBIDDEN_WINDOWS_INSTALL_DIR_ERROR_CODE } from "@zcode/shared";
+import {
+  DATA_BASE_DIR_FORBIDDEN_WINDOWS_INSTALL_DIR_ERROR_CODE,
+  OPEN_ZCODE_DATA_DIR_NAME,
+} from "@zcode/shared";
 
 let _dataBaseDir: string | null = null;
 export const ZCODE_WINDOWS_APP_INSTALL_DIR_ENV = "ZCODE_WINDOWS_APP_INSTALL_DIR";
@@ -39,17 +42,21 @@ export function getDataBaseDir(): string {
   return defaultDataBaseDir;
 }
 
-/** {dataBaseDir}/.zcode */
+/**
+ * OpenZCode 用户级数据根：`{dataBaseDir}/.openzcode`。
+ * 与官方 ZCode 的 `.zcode` 完全隔离（凭据、设置、会话、遥测互不可见），
+ * 见 specs/environment-isolation-from-zcode.md。
+ */
 export function getZCodeDataRootDir(): string {
-  return join(getDataBaseDir(), ".zcode");
+  return join(getDataBaseDir(), OPEN_ZCODE_DATA_DIR_NAME);
 }
 
-/** 非项目对话共享的真实工作目录；默认 ~/.zcode/workspace/default。 */
+/** 非项目对话共享的真实工作目录；默认 ~/.openzcode/workspace/default。 */
 export function getConversationWorkspaceDir(): string {
   return join(getZCodeDataRootDir(), "workspace", "default");
 }
 
-/** {dataBaseDir}/.zcode/v2 */
+/** {dataBaseDir}/.openzcode/v2 */
 export function getAppConfigDir(): string {
   return join(getZCodeDataRootDir(), "v2");
 }
@@ -113,6 +120,12 @@ function collectWindowsForbiddenAppInstallDirs(
   const candidates = [
     options.appInstallDir,
     readEnvValue(env, ZCODE_WINDOWS_APP_INSTALL_DIR_ENV),
+    programFiles ? win32.join(programFiles, "OpenZCode") : null,
+    programFilesX86 ? win32.join(programFilesX86, "OpenZCode") : null,
+    programW6432 ? win32.join(programW6432, "OpenZCode") : null,
+    localAppData ? win32.join(localAppData, "Programs", "OpenZCode") : null,
+    // 官方 ZCode 的安装目录同样禁止作为 OpenZCode 数据根：两个产品的安装器
+    // 都管理自己的目录，把数据写进去会在升级时被覆盖或引发权限竞争。
     programFiles ? win32.join(programFiles, "ZCode") : null,
     programFilesX86 ? win32.join(programFilesX86, "ZCode") : null,
     programW6432 ? win32.join(programW6432, "ZCode") : null,
@@ -182,7 +195,7 @@ export function getGitCheckpointIndexRootDir(): string {
   return join(getZCodeDataRootDir(), "git-checkpoint-index");
 }
 
-/** ~/.zcode/v2/tasks-index.sqlite */
+/** ~/.openzcode/v2/tasks-index.sqlite */
 export function getTasksIndexDatabasePath(): string {
   return join(getAppConfigDir(), "tasks-index.sqlite");
 }
@@ -200,12 +213,12 @@ export function getWorkspaceHash(workspacePath: string, workspaceIdentity?: stri
     .slice(0, 12);
 }
 
-/** ~/.zcode/v2/sessions/{workspaceHash} */
+/** ~/.openzcode/v2/sessions/{workspaceHash} */
 function getTaskSessionDir(workspacePath: string, workspaceIdentity?: string): string {
   return join(getAppConfigDir(), "sessions", getWorkspaceHash(workspacePath, workspaceIdentity));
 }
 
-/** ~/.zcode/v2/sessions/{workspaceHash}/{taskId}.json */
+/** ~/.openzcode/v2/sessions/{workspaceHash}/{taskId}.json */
 export function getLegacyTaskSessionSnapshotPath(
   workspacePath: string,
   taskId: string,
@@ -214,7 +227,7 @@ export function getLegacyTaskSessionSnapshotPath(
   return join(getTaskSessionDir(workspacePath, workspaceIdentity), `${taskId}.json`);
 }
 
-/** ~/.zcode/v2/sessions/{workspaceHash}/{taskId}.deleted.json */
+/** ~/.openzcode/v2/sessions/{workspaceHash}/{taskId}.deleted.json */
 export function getLegacyDeletedTaskSessionSnapshotPath(
   workspacePath: string,
   taskId: string,
@@ -224,13 +237,13 @@ export function getLegacyDeletedTaskSessionSnapshotPath(
 }
 
 /**
- * Copy the .zcode/v2 data directory from one base dir to another.
+ * 把 `.openzcode/v2` 数据目录从一个 base dir 拷贝到另一个。
  * Excludes setting.json and its transient atomic-write siblings — bootstrap
  * state must only live at the default homedir location.
  */
 export async function copyDataDirectory(oldBaseDir: string, newBaseDir: string): Promise<void> {
-  const oldDir = join(oldBaseDir, ".zcode", "v2");
-  const newDir = join(newBaseDir, ".zcode", "v2");
+  const oldDir = join(oldBaseDir, OPEN_ZCODE_DATA_DIR_NAME, "v2");
+  const newDir = join(newBaseDir, OPEN_ZCODE_DATA_DIR_NAME, "v2");
   await cp(oldDir, newDir, {
     recursive: true,
     force: false,

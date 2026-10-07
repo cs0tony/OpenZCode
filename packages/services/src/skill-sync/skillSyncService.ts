@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import { cp, lstat, mkdir, readFile, readdir, realpath, rm, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join, relative } from "node:path";
+import { OPEN_ZCODE_DATA_DIR_NAME } from "@zcode/shared";
 import { parse as parseYaml } from "yaml";
 import type {
   SkillSyncArchiveExportResult,
@@ -131,7 +132,7 @@ function resolveUserHomeDir(): string {
 }
 
 function getUserZcodeSkillRoot(): string {
-  return join(resolveUserHomeDir(), ".zcode", "skills");
+  return join(resolveUserHomeDir(), OPEN_ZCODE_DATA_DIR_NAME, "skills");
 }
 
 function getUserAgentsSkillRoot(): string {
@@ -403,8 +404,8 @@ async function importArchive(
       maxExtractedBytes: maxArchiveBytes,
     });
     const extractedSkillDirectories = await collectExtractedSkillDirectories(tempRoot);
-    // 远端 SkillsService 会同时读取用户级 .zcode/skills 和 .agents/skills。
-    // 同名 skill 已在兼容目录存在时也必须跳过，避免同步后在 .zcode 下生成重复来源。
+    // 远端 SkillsService 会同时读取用户级 .openzcode/skills 和 .agents/skills。
+    // 同名 skill 已在兼容目录存在时也必须跳过，避免同步后在 .openzcode 下生成重复来源。
     const existingSkillPathByName = await collectUserSkillDirectoryPathByName();
     const results: SkillSyncImportResult["results"] = [];
     for (const extracted of extractedSkillDirectories) {

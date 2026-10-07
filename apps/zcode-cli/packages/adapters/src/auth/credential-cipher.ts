@@ -97,5 +97,6 @@ function resolveCredentialSecret(env: Record<string, string | undefined>): strin
     // Some packaged or sandboxed runtimes cannot resolve OS user info.
   }
 
-  return `zcode-credential-fallback:${platform()}:${homedir()}:${username}`;
+  // OpenZCode 使用独立回退密钥前缀：即使凭据文件被手工拷贝，也无法被另一产品解密。
+  return `openzcode-credential-fallback:${platform()}:${homedir()}:${username}`;
 }

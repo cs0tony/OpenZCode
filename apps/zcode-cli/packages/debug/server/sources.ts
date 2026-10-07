@@ -16,11 +16,12 @@ import type {
 } from "./types.js";
 
 export function defaultLogDir(): string {
-  return join(homedir(), ".zcode", "cli", "log");
+  // OpenZCode 隔离目录；与 packages/shared/src/open-zcode-dirs.ts 的 OPEN_ZCODE_DATA_DIR_NAME 常量保持一致。
+  return join(homedir(), ".openzcode", "cli", "log");
 }
 
 export function defaultDbPath(): string {
-  return join(homedir(), ".zcode", "cli", "db", "db.sqlite");
+  return join(homedir(), ".openzcode", "cli", "db", "db.sqlite");
 }
 
 export async function loadLogs(options: ObservationOptions): Promise<SourceLoadResult<LogRecord>> {

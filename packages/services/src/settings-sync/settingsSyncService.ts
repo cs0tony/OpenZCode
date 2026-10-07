@@ -34,6 +34,7 @@ import {
 } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
+import { OPEN_ZCODE_DATA_DIR_NAME } from "@zcode/shared";
 import { parse as parseYaml } from "yaml";
 import { parse as parseToml } from "smol-toml";
 import { CommandFileParser } from "../commands/commandFileParser.js";
@@ -426,7 +427,7 @@ function getWorkspaceZcodeSkillRoot(workspacePath: string): string {
 }
 
 function getUserZcodeSkillRoot(): string {
-  return join(resolveUserHomeDir(), ".zcode", "skills");
+  return join(resolveUserHomeDir(), OPEN_ZCODE_DATA_DIR_NAME, "skills");
 }
 
 function getWorkspaceZcodeCommandRoot(workspacePath: string): string {
@@ -434,7 +435,7 @@ function getWorkspaceZcodeCommandRoot(workspacePath: string): string {
 }
 
 function getUserZcodeCommandRoot(): string {
-  return join(resolveUserHomeDir(), ".zcode", "commands");
+  return join(resolveUserHomeDir(), OPEN_ZCODE_DATA_DIR_NAME, "commands");
 }
 
 function getWorkspaceZcodePluginRoot(workspacePath: string): string {
@@ -442,11 +443,11 @@ function getWorkspaceZcodePluginRoot(workspacePath: string): string {
 }
 
 function getUserZcodePluginRoot(): string {
-  return join(resolveUserHomeDir(), ".zcode", "plugins");
+  return join(resolveUserHomeDir(), OPEN_ZCODE_DATA_DIR_NAME, "plugins");
 }
 
 function getUserZcodeCliConfigPath(): string {
-  return join(resolveUserHomeDir(), ".zcode", "cli", "config.json");
+  return join(resolveUserHomeDir(), OPEN_ZCODE_DATA_DIR_NAME, "cli", "config.json");
 }
 
 function getWorkspaceZcodeConfigPath(workspacePath: string): string {
@@ -458,7 +459,7 @@ function getClaudeUserAgentsFileSourcePath(): string {
 }
 
 function getUserZcodeAgentsFilePath(): string {
-  return join(resolveUserHomeDir(), ".zcode", "AGENTS.md");
+  return join(resolveUserHomeDir(), OPEN_ZCODE_DATA_DIR_NAME, "AGENTS.md");
 }
 
 function resolveTargetRootForScope(

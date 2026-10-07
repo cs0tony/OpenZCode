@@ -1,13 +1,16 @@
 import { stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
+import { OPEN_ZCODE_DATA_DIR_NAME } from "@zcode/shared";
 import type { CustomCommandRoot, CustomCommandSource } from "@zcode/contracts";
 
 const COMMANDS_DIR = "commands";
 const GIT_MARKER = ".git";
 const HOME_PREFIX = "~/";
 const PRIORITY_STEP = 10;
-const ZCODE_DIR = ".zcode";
+// 用户级走 OpenZCode 隔离目录；项目级 `.zcode` 是工作区工件，跨产品共享。
+const USER_ZCODE_DIR = OPEN_ZCODE_DATA_DIR_NAME;
+const PROJECT_ZCODE_DIR = ".zcode";
 const AGENTS_DIR = ".agents";
 
 export interface CustomCommandRootResolutionOptions {
@@ -96,10 +99,11 @@ function commandRootsForBase(
   scope: CustomCommandRoot["scope"],
   nextPriority: () => number,
 ): CustomCommandRoot[] {
+  const zcodeDirName = scope === "user" ? USER_ZCODE_DIR : PROJECT_ZCODE_DIR;
   // 合并而不是 fallback：兼容 `.agents` 命令和原生 `.zcode` 命令需要同时可见。
   // 同一级别 `.zcode` 先扫描，命令同名时仍按“先到先赢”处理。
   return [
-    root(join(baseDirectory, ZCODE_DIR, COMMANDS_DIR), scope, "zcode", nextPriority()),
+    root(join(baseDirectory, zcodeDirName, COMMANDS_DIR), scope, "zcode", nextPriority()),
     root(join(baseDirectory, AGENTS_DIR, COMMANDS_DIR), scope, "agents", nextPriority()),
   ];
 }

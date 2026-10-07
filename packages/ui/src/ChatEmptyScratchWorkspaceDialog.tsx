@@ -1,5 +1,7 @@
+import { OPEN_ZCODE_SCRATCH_WORKSPACE_DIR_NAME } from "@zcode/shared";
+
 export function getScratchWorkspaceLocationHint(name: string) {
-  return `~/ZCodeProject/${name.trim()}`;
+  return `~/${OPEN_ZCODE_SCRATCH_WORKSPACE_DIR_NAME}/${name.trim()}`;
 }
 
 export function getScratchWorkspaceNameErrorKind(name: string) {
