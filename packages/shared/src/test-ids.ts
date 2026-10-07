@@ -11,6 +11,10 @@ export const TID_LOGIN_TRIGGER = "login-trigger";
 export const TID_LOGIN_MENU_ITEM = "login-menu-item";
 /** 登录页切换到 API Key 登录方式按钮 */
 export const TID_LOGIN_USE_API_KEY_BUTTON = "login-use-api-key-button";
+/** 欢迎页跳转到设置页模型供应商"添加供应商"的按钮 */
+export const TID_LOGIN_ADD_PROVIDER_BUTTON = "login-add-provider-button";
+/** 欢迎页暂时跳过按钮（与 API Key 表单内跳过同语义） */
+export const TID_LOGIN_SKIP_BUTTON = "login-skip-button";
 /** API Key 登录 provider 选择触发器 */
 export const TID_LOGIN_API_KEY_PROVIDER_TRIGGER = "login-api-key-provider-trigger";
 /** API Key 登录 provider 选择项（动态后缀为 provider choice） */

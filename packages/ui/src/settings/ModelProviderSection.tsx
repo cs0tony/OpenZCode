@@ -61,6 +61,7 @@ import { useSettings } from "@/hooks/useSettingService.js";
 import { resolveLogoutProviderFamilyDomain } from "@/lib/providerFamilyDomainSettings.js";
 import {
   addPendingSettingsSectionListener,
+  consumePendingSettingsModelProviderAddIntent,
   consumePendingSettingsModelProviderTarget,
   type SettingsModelProviderTarget,
 } from "@/lib/settingsNavigation.js";
@@ -356,10 +357,21 @@ export function ModelProviderSection({
     }
   }, [applyModelProviderTarget, onConsumePendingModelProviderTarget, pendingModelProviderTarget]);
 
+  // 欢迎页"添加供应商"直达：设置页因本意图挂载时，一次性消费并自动打开添加供应商选择器。
+  useEffect(() => {
+    if (consumePendingSettingsModelProviderAddIntent()) {
+      setTemplatePickerOpen(true);
+    }
+  }, []);
+
   useEffect(
     () =>
       addPendingSettingsSectionListener((section, detail) => {
         if (section !== "modelProvider") {
+          return;
+        }
+        if (detail?.modelProviderAddProvider) {
+          setTemplatePickerOpen(true);
           return;
         }
         applyModelProviderTarget(

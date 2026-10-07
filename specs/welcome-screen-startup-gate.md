@@ -30,6 +30,18 @@ OAuth 登录、欢迎页"跳过"、设置页点击预设导航项三个入口写
   不受本规则影响。
 - provider 读取失败时不得误判为"无可用 provider"：沿用现有"结束门禁等待、不弹欢迎页"的分支。
 
+## 欢迎页入口（providers 模式按钮栈）
+
+"使用 API key"按钮下方固定提供两个入口：
+
+1. **添加供应商**：深链设置页 → 模型供应商分区，并自动打开"添加供应商"选择器
+   （`setPendingSettingsSectionIntent("modelProvider", { modelProviderAddProvider: true })` +
+   打开设置 tab）；欢迎页经 `LoginCompleteReason = "openProviderSettings"` 走统一 complete 流程
+   关闭（启动自动弹出时会顺带创建默认 workspace）。
+2. **暂时跳过**：与 API Key 表单内的跳过同语义——写 `providerFamilyDomain` 确认家族归属
+   （默认取 locale 推断的家族）后以 `"skip"` complete。差异：欢迎页没有错误展示位，域确认
+   写入失败仅告警并放行退出，避免存储异常把用户困在欢迎页（启动门禁已不依赖该字段）。
+
 ## 验收场景
 
 1. 全新安装（未登录、无任何 provider）：展示欢迎页。

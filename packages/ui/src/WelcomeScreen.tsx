@@ -9,6 +9,8 @@ import { Loader2Icon, LoaderIcon, TriangleAlertIcon } from "lucide-react";
 import {
   type OAuthProviderMeta,
   BIGMODEL_PROVIDER_ID,
+  TID_LOGIN_ADD_PROVIDER_BUTTON,
+  TID_LOGIN_SKIP_BUTTON,
   TID_LOGIN_USE_API_KEY_BUTTON,
   TID_OAUTH_CANCEL,
   TID_OAUTH_ERROR,
@@ -20,17 +22,25 @@ import { Alert, AlertDescription } from "./components/ui/alert.js";
 import { Button } from "./components/ui/button.js";
 import { ZCodeAboutLogo } from "@/components/ui/ZCodeAboutLogo.js";
 import { useOAuth } from "./hooks/useOAuth.js";
+import { useServices } from "./hooks/useServices.js";
 import { useZCodeIntl } from "./i18n/IntlProvider.js";
 import { LoginApiKeyForm } from "./login/LoginApiKeyForm.js";
+import {
+  buildLoginApiKeySkipSettings,
+  resolveLoginApiKeyDefaultProvider,
+} from "./login/LoginApiKeyForm.helpers.js";
+import { logger } from "./logger.js";
 import { renderOAuthProviderIcon } from "./lib/oauthProviderIcon.js";
+import { setPendingSettingsSectionIntent } from "./lib/settingsNavigation.js";
 import { ThemeHeroVisual } from "./openWorkspacePageThemeHero.js";
+import { useTabStore } from "./store/TabStoreProvider.js";
 import { useZCodeStore } from "./store/StoreProvider.js";
 
 interface WelcomeScreenProps {
   onComplete: (reason: LoginCompleteReason) => void | Promise<void>;
 }
 
-export type LoginCompleteReason = "oauth" | "apiKey" | "skip";
+export type LoginCompleteReason = "oauth" | "apiKey" | "skip" | "openProviderSettings";
 
 export function WelcomeScreen({ onComplete }: WelcomeScreenProps) {
   return (
@@ -69,7 +79,9 @@ function shouldCompleteLoginFromExistingUser(params: {
 }
 
 function LoginPanel({ active, onComplete }: LoginPanelProps) {
-  const { intl } = useZCodeIntl();
+  const { intl, locale } = useZCodeIntl();
+  const { settingService } = useServices();
+  const openSettingsTab = useTabStore((state) => state.openSettingsTab);
   const {
     startLogin,
     cancel,
@@ -90,6 +102,7 @@ function LoginPanel({ active, onComplete }: LoginPanelProps) {
   const clearLoginEntryRequest = useZCodeStore((s) => s.clearLoginEntryRequest);
   const markLoginEntryAttemptStatus = useZCodeStore((s) => s.markLoginEntryAttemptStatus);
   const [loginMode, setLoginMode] = useState<"providers" | "apiKey">("providers");
+  const [skipWelcomePending, setSkipWelcomePending] = useState(false);
   const wasActiveRef = useRef(active);
   const consumedLoginRequestRef = useRef<number | null>(null);
   const observedOAuthSuccessSeqRef = useRef(oauthSuccessSeq);
@@ -107,6 +120,31 @@ function LoginPanel({ active, onComplete }: LoginPanelProps) {
     },
     [markLoginEntryAttemptStatus],
   );
+
+  // 欢迎页级"暂时跳过"与 API Key 表单内的跳过同语义：确认 provider family 归属
+  // （写 providerFamilyDomain 设置）后退出欢迎页。区别是这里没有错误展示位，
+  // 域确认写入失败时放行退出——启动门禁已不依赖该字段，不能让存储异常困住用户。
+  const handleSkipWelcome = useCallback(async () => {
+    setSkipWelcomePending(true);
+    try {
+      await settingService.update(
+        buildLoginApiKeySkipSettings(resolveLoginApiKeyDefaultProvider(locale), Date.now()),
+      );
+    } catch (error) {
+      logger.warn("[WelcomeScreen] 跳过时确认 provider family 域失败，继续退出欢迎页", {
+        error,
+      });
+    }
+    await onComplete("skip");
+  }, [locale, onComplete, settingService]);
+
+  // "添加供应商"直达：深链设置页 → 模型供应商分区并自动打开添加供应商选择器；
+  // 欢迎页走同一 complete 流程关闭（启动自动弹出时会顺带创建默认 workspace）。
+  const handleAddProvider = useCallback(() => {
+    setPendingSettingsSectionIntent("modelProvider", { modelProviderAddProvider: true });
+    openSettingsTab();
+    void onComplete("openProviderSettings");
+  }, [onComplete, openSettingsTab]);
 
   const startTrackedLogin = useCallback(
     (
@@ -348,6 +386,26 @@ function LoginPanel({ active, onComplete }: LoginPanelProps) {
                   }}
                 >
                   {intl.formatMessage({ id: "login.useApiKey" })}
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-10 w-full text-ui-base"
+                  size="lg"
+                  data-testid={TID_LOGIN_ADD_PROVIDER_BUTTON}
+                  onClick={handleAddProvider}
+                >
+                  {intl.formatMessage({ id: "login.addProvider" })}
+                </Button>
+                <Button
+                  type="button"
+                  variant="link"
+                  className="h-7 w-full text-ui-base text-foreground-subtle hover:text-foreground"
+                  data-testid={TID_LOGIN_SKIP_BUTTON}
+                  disabled={skipWelcomePending}
+                  onClick={() => void handleSkipWelcome()}
+                >
+                  {skipWelcomePending ? <Loader2Icon className="size-4 animate-spin" /> : null}
+                  {intl.formatMessage({ id: "login.skip" })}
                 </Button>
               </div>
             ) : null}

@@ -803,6 +803,7 @@ const zhCN: Record<string, string> = {
   "login.expired.action": "重新登录",
   "login.expired.restart": "确认并重启",
   "login.useApiKey": "使用 API key",
+  "login.addProvider": "添加供应商",
   "login.apiKey.title": "API Key",
   "login.apiKey.placeholder": "输入 API key",
   "login.apiKey.providerLabel": "API key 提供方",

@@ -882,6 +882,7 @@ const enUS: Record<string, string> = {
   "login.expired.action": "Sign in again",
   "login.expired.restart": "Confirm and restart",
   "login.useApiKey": "Use API key",
+  "login.addProvider": "Add provider",
   "login.apiKey.title": "API Key",
   "login.apiKey.placeholder": "Enter API key",
   "login.apiKey.providerLabel": "API key provider",

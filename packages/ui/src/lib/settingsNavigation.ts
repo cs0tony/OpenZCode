@@ -31,6 +31,7 @@ const SETTINGS_SECTION_INTENT_KEY = "zcode-settings-section-intent",
   SETTINGS_PLUGIN_ORIGIN_INTENT_KEY = "zcode-settings-plugin-origin-intent",
   SETTINGS_PLUGIN_SCOPE_KEY_INTENT_KEY = "zcode-settings-plugin-scope-key-intent";
 const SETTINGS_MODEL_PROVIDER_ID_INTENT_KEY = "zcode-settings-model-provider-id-intent";
+const SETTINGS_MODEL_PROVIDER_ADD_INTENT_KEY = "zcode-settings-model-provider-add-intent";
 const SETTINGS_SECTION_INTENT_EVENT = "zcode:settings-section-intent",
   SETTINGS_LAST_SECTION_STORAGE_KEY = "zcode-settings-last-section";
 const HIDDEN_SETTINGS_SECTIONS = new Set<SettingsSectionId>([
@@ -52,6 +53,8 @@ interface SettingsSectionIntentEventDetail {
   pluginScopeKey?: string;
   usageTab?: SettingsUsageTabTarget;
   modelProviderId?: string;
+  /** 跳到模型供应商分区时是否顺带自动打开"添加供应商"选择器 */
+  modelProviderAddProvider?: boolean;
 }
 
 export interface SettingsModelProviderTarget {
@@ -219,6 +222,7 @@ export function setPendingSettingsSectionIntent(
     pluginOrigin?: SettingsPluginNavigationOrigin;
     pluginScopeKey?: string;
     modelProviderId?: string;
+    modelProviderAddProvider?: boolean;
     usageTab?: SettingsUsageTabTarget;
   } = {},
 ): void {
@@ -252,6 +256,11 @@ export function setPendingSettingsSectionIntent(
     } else {
       window.sessionStorage.removeItem(SETTINGS_MODEL_PROVIDER_ID_INTENT_KEY);
     }
+    if (options.modelProviderAddProvider) {
+      window.sessionStorage.setItem(SETTINGS_MODEL_PROVIDER_ADD_INTENT_KEY, "1");
+    } else {
+      window.sessionStorage.removeItem(SETTINGS_MODEL_PROVIDER_ADD_INTENT_KEY);
+    }
   } catch {
     // 忽略浏览器存储异常，不影响主流程。
   }
@@ -267,6 +276,7 @@ export function setPendingSettingsSectionIntent(
         pluginScopeKey: options.pluginScopeKey?.trim() || undefined,
         usageTab: options.usageTab,
         modelProviderId: options.modelProviderId,
+        modelProviderAddProvider: options.modelProviderAddProvider,
       },
     }),
   );
@@ -281,6 +291,7 @@ function clearPendingSettingsSectionIntent(): void {
     window.sessionStorage.removeItem(SETTINGS_SECTION_INTENT_KEY);
     window.sessionStorage.removeItem(SETTINGS_USAGE_TAB_INTENT_KEY);
     window.sessionStorage.removeItem(SETTINGS_MODEL_PROVIDER_ID_INTENT_KEY);
+    window.sessionStorage.removeItem(SETTINGS_MODEL_PROVIDER_ADD_INTENT_KEY);
     window.sessionStorage.removeItem(SETTINGS_PLUGIN_TAB_INTENT_KEY);
     window.sessionStorage.removeItem(SETTINGS_PLUGIN_ORIGIN_INTENT_KEY);
     window.sessionStorage.removeItem(SETTINGS_PLUGIN_SCOPE_KEY_INTENT_KEY);
@@ -410,6 +421,21 @@ export function consumePendingSettingsModelProviderTarget():
   } catch {
     // 忽略浏览器存储异常，不影响主流程。
     return undefined;
+  }
+}
+
+export function consumePendingSettingsModelProviderAddIntent(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(SETTINGS_MODEL_PROVIDER_ADD_INTENT_KEY);
+    window.sessionStorage.removeItem(SETTINGS_MODEL_PROVIDER_ADD_INTENT_KEY);
+    return raw === "1";
+  } catch {
+    // 忽略浏览器存储异常，不影响主流程。
+    return false;
   }
 }
 
