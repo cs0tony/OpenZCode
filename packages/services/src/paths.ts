@@ -126,10 +126,10 @@ function collectWindowsForbiddenAppInstallDirs(
     localAppData ? win32.join(localAppData, "Programs", "OpenZCode") : null,
     // 官方 ZCode 的安装目录同样禁止作为 OpenZCode 数据根：两个产品的安装器
     // 都管理自己的目录，把数据写进去会在升级时被覆盖或引发权限竞争。
-    programFiles ? win32.join(programFiles, "ZCode") : null,
-    programFilesX86 ? win32.join(programFilesX86, "ZCode") : null,
-    programW6432 ? win32.join(programW6432, "ZCode") : null,
-    localAppData ? win32.join(localAppData, "Programs", "ZCode") : null,
+    programFiles ? win32.join(programFiles, "OpenZCode") : null,
+    programFilesX86 ? win32.join(programFilesX86, "OpenZCode") : null,
+    programW6432 ? win32.join(programW6432, "OpenZCode") : null,
+    localAppData ? win32.join(localAppData, "Programs", "OpenZCode") : null,
   ];
   const seen = new Set<string>();
   const result: string[] = [];
@@ -205,7 +205,7 @@ function getWorkspaceKey(workspacePath: string, workspaceIdentity?: string): str
   return workspaceIdentity?.trim() || workspacePath;
 }
 
-/** 与 ZCode session 持久化一致：使用 workspaceKey 的 SHA-256 前 12 位 */
+/** 与 OpenZCode session 持久化一致：使用 workspaceKey 的 SHA-256 前 12 位 */
 export function getWorkspaceHash(workspacePath: string, workspaceIdentity?: string): string {
   return createHash("sha256")
     .update(getWorkspaceKey(workspacePath, workspaceIdentity))

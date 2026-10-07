@@ -435,7 +435,6 @@ function RootInner({
       enabled: providerAvailabilityLoginEntryGuardEnabled,
       user,
       isRestoringOAuthSession: isResolvingStartupAuthState || providerStartupSyncPending,
-      providerFamilyDomain: appSettings?.providerFamilyDomain,
       modelSelectionView: rootModelSelectionView,
       modelSelectionError:
         rootModelSelectionRead.state.status === "error"
@@ -461,7 +460,7 @@ function RootInner({
   });
   const isStartupProviderLoginEntryOpen = welcomeScreenOpenReason === "startup-provider-required";
   // 首次安装时 provider 登录入口判定晚于 workspace 注入，ChatView 会先 mount 并触发草稿预热。
-  // 这里把 provider 启动检查纳入 workspace 恢复门禁，避免未连接账号前启动 ZCode session。
+  // 这里把 provider 启动检查纳入 workspace 恢复门禁，避免未连接账号前启动 OpenZCode session。
   const canRestoreWorkspaceSession =
     !isResolvingStartupAuthState &&
     !isResolvingProviderStartupState &&
@@ -971,7 +970,7 @@ function RootInner({
         {rootModelSelectionErrorNode}
         {remoteConnectionDialog}
         {directoryBrowserDialog}
-        {/* HTML 启动壳已经展示 ZCode SVG，但 React 接管 root 后旧壳会被整棵替换。
+        {/* HTML 启动壳已经展示 OpenZCode SVG，但 React 接管 root 后旧壳会被整棵替换。
             之前阻塞恢复 tab / 初始 workspace 注入时重新渲染纯文字“加载中...”，所以启动被拆成两套 loading。
             这里复用同一套 SVG 启动画面，只把文案保留到 aria-label，保证视觉始终连续且不牺牲可访问性。 */}
         <RootStartupLoading label={loadingLabel} />

@@ -408,7 +408,7 @@ function resolveHostProcessBinaryEnv(
   hostProcessLocalEnv: Record<string, string>,
   bundledPath: string | undefined,
 ): string | undefined {
-  // ZCode Agent 与 app 协议适配强绑定版本，生产包必须优先使用随包携带的固定 runtime。
+  // OpenZCode Agent 与 app 协议适配强绑定版本，生产包必须优先使用随包携带的固定 runtime。
   // 用户机器或本地 .env 里残留的 GLM_BINARY_PATH 即使存在，也可能版本不兼容。
   // 只有 bundled runtime 缺失时才把显式路径作为兜底，避免用户本机 CLI 覆盖内嵌版本。
   if (bundledPath) {
@@ -544,11 +544,11 @@ export function buildHostProcessEnv(hostProcessLocalEnv: Record<string, string>)
     // OTLP 凭据只定向传到 host；host 初始化 services 时会立即捕获并从 process.env 清除，
     // 后续只在启动 Agent 时短暂注入，不会进入 Bash/MCP/tool env。
     ...agentTelemetryEnv,
-    // ZCode 运行时不再使用 NODE_ENV；它会被用户 shell、包管理器和测试框架复用。
+    // OpenZCode 运行时不再使用 NODE_ENV；它会被用户 shell、包管理器和测试框架复用。
     // 这里显式下发 ZCODE_RUNTIME_ENV，并在继承环境里清掉 NODE_ENV，避免 host/agent/Bash 被污染。
     [ZCODE_RUNTIME_ENV_KEY]: resolveHostProcessNodeEnv(),
     // 显式注入编译期产品身份，保证主进程与 host 的身份语义一致；地址独立解析。
-    // inheritedEnv 从 .env 通用变量补齐 ZCode/ZAI 链接，未覆盖时统一使用线上默认值。
+    // inheritedEnv 从 .env 通用变量补齐 OpenZCode/ZAI 链接，未覆盖时统一使用线上默认值。
     ZCODE_ENV,
     // Preview 与生产版共享任务、配置和凭据，但不同版本的 Helper 不能互相覆盖或触发降级保护。
     // 只隔离 computer-use 下的运行组件，不改写 ZCODE_HOME / ZCODE_DATA_BASE_DIR 业务数据根。

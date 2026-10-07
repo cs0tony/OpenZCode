@@ -163,7 +163,7 @@ export interface TelemetryProviderIdentity {
 }
 
 /**
- * 旧报表身份（`builtin:zai` / `builtin:zai-start-plan` 等）是 ZCode 自己的固定 ID。
+ * 旧报表身份（`builtin:zai` / `builtin:zai-start-plan` 等）是 OpenZCode 自己的固定 ID。
  *
  * 修复原因：V4 supervisor 投影 /report detail 时会用 legacyTelemetryProviderId 把运行时
  * `account:*` 映射成这些旧身份，plan_ttft / perf_ui_* 复用同一份 detail。只认 `account:*`
