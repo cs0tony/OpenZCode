@@ -61,7 +61,8 @@ const enUS: Record<string, string> = {
   "occupationOnboarding.migration": "Migrate conversations",
   "occupationOnboarding.migrationDescription": "Migrate conversation history from Claude Code",
   "occupationOnboarding.memory": "Enable Workspace Memory",
-  "occupationOnboarding.memoryDescription": "Let OpenZCode remember your preferences and work context.",
+  "occupationOnboarding.memoryDescription":
+    "Let OpenZCode remember your preferences and work context.",
   "occupationOnboarding.suggestions": "Enable proactive task suggestions",
   "occupationOnboarding.suggestionsDescription":
     "Show suggestions in new conversations. Click to fill the composer.",
@@ -2564,6 +2565,15 @@ const enUS: Record<string, string> = {
   "settings.plugins.remoteSync.stopped": "Stopped",
   "settings.plugins.remoteSync.stop": "Stop sync",
   "settings.plugins.remoteSync.logTooltip": "Sync log",
+  "settings.plugins.localSync.open": "Sync from local ZCode",
+  "settings.plugins.localSync.hint":
+    "Copy missing built-in plugins from the ZCode app installed on this machine (reads its plugin cache only; no dependency afterwards)",
+  "settings.plugins.localSync.notFound": "No local ZCode installation detected.",
+  "settings.plugins.localSync.success": "Synced {count} built-in plugins from local ZCode.",
+  "settings.plugins.localSync.upToDate": "Built-in plugins are already up to date.",
+  "settings.plugins.localSync.versionMissing":
+    "{count} plugins have no matching version in local ZCode and were skipped.",
+  "settings.plugins.localSync.failed": "Failed to sync built-in plugins.",
   "settings.plugins.remoteSync.optionsSummary":
     "Options: {syncable} will be attempted; {manual} require manual setup on remote",
   "settings.plugins.remoteSync.resultEmpty": "No plugin sync results were returned.",
@@ -3554,7 +3564,8 @@ const enUS: Record<string, string> = {
   "sidebar.usage.plan.toolCalls": "Tool calls",
   "sidebar.usage.plan.mcp": "OpenZCode MCP",
   "sidebar.usage.plan.zcodeMcp": "OpenZCode MCP",
-  "sidebar.usage.plan.zcodeMcpDescription": "Daily aggregate quota for OpenZCode built-in plugin MCPs",
+  "sidebar.usage.plan.zcodeMcpDescription":
+    "Daily aggregate quota for OpenZCode built-in plugin MCPs",
   "chat.planUsage.title": "Plan usage",
   "chat.planUsage.titleWithPlan": "{plan} Plan usage",
   "chat.planUsage.providerFallback": "Current provider",

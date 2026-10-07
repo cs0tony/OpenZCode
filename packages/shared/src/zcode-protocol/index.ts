@@ -3243,6 +3243,32 @@ export type ZCodePluginsRestoreBuiltinResult = z.infer<
   typeof zcodePluginsRestoreBuiltinResultSchema
 >;
 
+// 从本机原版 ZCode 的官方插件缓存一次性复制缺失的内置插件（specs/sync-official-plugins-from-local-zcode.md）。
+export const zcodePluginsSyncOfficialFromLocalZcodeParamsSchema = z
+  .object({
+    workspace: zcodeWorkspaceRefSchema,
+  })
+  .strict();
+export type ZCodePluginsSyncOfficialFromLocalZcodeParams = z.infer<
+  typeof zcodePluginsSyncOfficialFromLocalZcodeParamsSchema
+>;
+
+export const zcodePluginSyncSkipReasonSchema = z.object({
+  plugin: nonEmptyString,
+  reason: nonEmptyString,
+});
+export const zcodePluginsSyncOfficialFromLocalZcodeResultSchema = z
+  .object({
+    officialCacheFound: z.boolean(),
+    officialCacheRoot: nonEmptyString.optional(),
+    synced: z.array(nonEmptyString),
+    skipped: z.array(zcodePluginSyncSkipReasonSchema),
+  })
+  .strict();
+export type ZCodePluginsSyncOfficialFromLocalZcodeResult = z.infer<
+  typeof zcodePluginsSyncOfficialFromLocalZcodeResultSchema
+>;
+
 export const zcodePluginsConfigureParamsSchema = z
   .object({
     workspace: zcodeWorkspaceRefSchema,
@@ -3637,6 +3663,7 @@ export const zcodeProtocolMethods = {
   pluginsUninstall: "plugins/uninstall",
   pluginsUpdate: "plugins/update",
   pluginsRestoreBuiltin: "plugins/restoreBuiltin",
+  pluginsSyncOfficialFromLocalZcode: "plugins/syncOfficialFromLocalZcode",
   pluginsConfigure: "plugins/configure",
   pluginsResetConfig: "plugins/resetConfig",
   pluginsValidate: "plugins/validate",

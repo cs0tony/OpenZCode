@@ -63,6 +63,7 @@ import {
   resetPluginConfig,
   restoreBuiltinPlugin,
   setPluginEnabled,
+  syncOfficialFromLocalZcode,
   uninstallPlugin,
   updatePlugin,
   updatePluginMarketplace,
@@ -699,6 +700,8 @@ export class ZCodeProtocolAgentServer {
         return await updatePlugin(this.context, request.params);
       case zcodeProtocolMethods.pluginsRestoreBuiltin:
         return await restoreBuiltinPlugin(this.context, request.params);
+      case zcodeProtocolMethods.pluginsSyncOfficialFromLocalZcode:
+        return await syncOfficialFromLocalZcode(this.context, request.params);
       case zcodeProtocolMethods.pluginsConfigure:
         return await configurePlugin(this.context, request.params);
       case zcodeProtocolMethods.pluginsResetConfig:

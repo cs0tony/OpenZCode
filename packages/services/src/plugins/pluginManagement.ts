@@ -19,6 +19,7 @@ import type {
   ZCodePluginsOverviewResult,
   ZCodePluginsReferenceCatalogResult,
   ZCodePluginsRestoreBuiltinResult,
+  ZCodePluginsSyncOfficialFromLocalZcodeResult,
   ZCodePluginsSetEnabledResult,
   ZCodePluginsUninstallResult,
   ZCodePluginsValidateResult,
@@ -38,6 +39,7 @@ import type {
   ZCodeAgentRemovePluginMarketplaceParams,
   ZCodeAgentRestoreBuiltinPluginParams,
   ZCodeAgentSetPluginEnabledParams,
+  ZCodeAgentSyncOfficialFromLocalZcodeParams,
   ZCodeAgentUninstallPluginParams,
   ZCodeAgentUpdatePluginMarketplaceParams,
   ZCodeAgentUpdatePluginParams,
@@ -79,6 +81,9 @@ export interface IPluginManagementService {
   restoreBuiltinPlugin(
     params: ZCodeAgentRestoreBuiltinPluginParams,
   ): Promise<ZCodePluginsRestoreBuiltinResult>;
+  syncOfficialFromLocalZcode(
+    params: ZCodeAgentSyncOfficialFromLocalZcodeParams,
+  ): Promise<ZCodePluginsSyncOfficialFromLocalZcodeResult>;
   configurePlugin(params: ZCodeAgentConfigurePluginParams): Promise<ZCodePluginsConfigureResult>;
   resetPluginConfig(
     params: ZCodeAgentResetPluginConfigParams,

@@ -13,6 +13,7 @@ import {
   zcodePluginsValidateParamsSchema,
   zcodePluginsDescribeParamsSchema,
   zcodePluginsRestoreBuiltinParamsSchema,
+  zcodePluginsSyncOfficialFromLocalZcodeParamsSchema,
   type ZCodeAvailablePluginSummary,
   type ZCodeInstalledPluginSummary,
   type ZCodePluginComponentGroup,
@@ -26,6 +27,7 @@ import {
   type ZCodePluginsMarketplaceMutationResult,
   type ZCodePluginsOverviewResult,
   type ZCodePluginsRestoreBuiltinResult,
+  type ZCodePluginsSyncOfficialFromLocalZcodeResult,
   type ZCodePluginsSetEnabledResult,
   type ZCodePluginsUninstallResult,
   type ZCodePluginsValidateResult,
@@ -50,6 +52,7 @@ import { listInstalledPluginRecords } from "@zcode/adapters/plugins";
 import { withPluginStorageLock } from "../lib/plugin-storage-lock.js";
 import { getCliStorageRoot, getPluginStorageRoot } from "../app/paths.js";
 import { resolveOfficialPluginHostMcpServerNames } from "../app/official-plugin-definitions.js";
+import { syncOfficialPluginsFromLocalZcodeCache } from "../app/bundled-plugins.js";
 import { createConfig, resolvePath, type ConfigResult } from "@zcode/adapters/config";
 import { parseParams, type ZCodeProtocolAgentServerContext } from "./server-types.js";
 
@@ -425,6 +428,20 @@ export async function restoreBuiltinPlugin(
     workingDirectory: params.workspace.workspacePath,
   });
   return { pluginId: params.pluginId, diagnostics: [] };
+}
+
+// 从本机原版 ZCode 的官方插件缓存一次性复制缺失的内置插件（specs/sync-official-plugins-from-local-zcode.md）。
+// 只读 ~/.zcode 的插件缓存目录；产物落 OpenZCode 自身缓存，之后与原目录无依赖。
+export async function syncOfficialFromLocalZcode(
+  context: ZCodeProtocolAgentServerContext,
+  rawParams: unknown,
+): Promise<ZCodePluginsSyncOfficialFromLocalZcodeResult> {
+  const params = parseParams(zcodePluginsSyncOfficialFromLocalZcodeParamsSchema, rawParams);
+  const pluginStorageRoot = resolvePluginStorageRoot(params.workspace.workspacePath);
+  return syncOfficialPluginsFromLocalZcodeCache({
+    logger: context.logger,
+    pluginStorageRoot,
+  });
 }
 
 export async function configurePlugin(

@@ -21,6 +21,7 @@ interface PluginManagementServiceDependencies {
     | "uninstallPlugin"
     | "updatePlugin"
     | "restoreBuiltinPlugin"
+    | "syncOfficialFromLocalZcode"
     | "configurePlugin"
     | "resetPluginConfig"
     | "validatePlugin"
@@ -48,6 +49,7 @@ export function createPluginManagementService(
     uninstallPlugin: (params) => agent.uninstallPlugin(params),
     updatePlugin: (params) => agent.updatePlugin(params),
     restoreBuiltinPlugin: (params) => agent.restoreBuiltinPlugin(params),
+    syncOfficialFromLocalZcode: (params) => agent.syncOfficialFromLocalZcode(params),
     configurePlugin: (params) => agent.configurePlugin(params),
     resetPluginConfig: (params) => agent.resetPluginConfig(params),
     validatePlugin: (params) => agent.validatePlugin(params),

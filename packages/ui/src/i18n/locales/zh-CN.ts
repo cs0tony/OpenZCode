@@ -697,7 +697,8 @@ const zhCN: Record<string, string> = {
   "bots.runtime.telegramLongPollingRunning": "Telegram 长轮询运行中。",
   "bots.runtime.telegramLongPollingStarting": "Telegram 长轮询启动中。",
   "bots.runtime.telegramLongPollingStopped": "Telegram 长轮询已停止。",
-  "bots.runtime.telegramLongPollingHandledElsewhere": "Telegram 长轮询由另一个 OpenZCode 窗口处理。",
+  "bots.runtime.telegramLongPollingHandledElsewhere":
+    "Telegram 长轮询由另一个 OpenZCode 窗口处理。",
   "bots.runtime.telegramTokenMissing": "Telegram 机器人凭据缺失。",
   "bots.runtime.telegramPollingFailedRetrying": "Telegram 轮询失败，正在重试。",
   "bots.runtime.feishuWebSocketStarting": "飞书 WebSocket 启动中。",
@@ -2416,6 +2417,16 @@ const zhCN: Record<string, string> = {
   "settings.plugins.remoteSync.resultEmpty": "暂无 Plugin 同步结果。",
   "settings.plugins.remoteSync.selectionCount": "已选 {selected}/{total}",
   "settings.plugins.remoteSync.noSelection": "请至少选择一个远端缺失的 Plugin。",
+  // 从本机原版 ZCode 一次性复制缺失的内置插件（specs/sync-official-plugins-from-local-zcode.md）。
+  "settings.plugins.localSync.open": "从本地 ZCode 同步",
+  "settings.plugins.localSync.hint":
+    "从本机安装的 ZCode 复制缺失的内置插件（仅读取其插件缓存，复制后不依赖原目录）",
+  "settings.plugins.localSync.notFound": "未检测到本地安装的 ZCode。",
+  "settings.plugins.localSync.success": "已从本地 ZCode 同步 {count} 个内置插件。",
+  "settings.plugins.localSync.upToDate": "内置插件已是最新，无需同步。",
+  "settings.plugins.localSync.versionMissing":
+    "{count} 个插件在本地 ZCode 中没有匹配版本，已跳过。",
+  "settings.plugins.localSync.failed": "同步内置插件失败。",
   "settings.mcp.remoteContext": "当前远端工作区：{target}",
   "settings.mcp.plugin.active": "插件内置",
   "settings.mcp.plugin.activeDescription": "该 MCP 服务器由已启用插件提供，配置跟随插件管理。",
@@ -3609,7 +3620,8 @@ const zhCN: Record<string, string> = {
   "settings.skills.diagnostics.code.skill_too_large": "SKILL.md 体积过大已截断",
   "settings.skills.diagnostics.code.skill_not_found": "技能未找到",
   "settings.subagents.title": "子智能体",
-  "settings.subagents.description": "管理 OpenZCode Agent 运行时消费的用户级子智能体 Markdown 文件。",
+  "settings.subagents.description":
+    "管理 OpenZCode Agent 运行时消费的用户级子智能体 Markdown 文件。",
   "settings.subagents.workspaceScopeUnsupported": "暂不支持工作区级创建或编辑",
   "settings.subagents.searchPlaceholder": "搜索子智能体...",
   "settings.subagents.empty": "没有找到子智能体",

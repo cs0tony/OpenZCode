@@ -2,6 +2,7 @@
 import { PluginAddMenu } from "@/settings/PluginAddMenu.js";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import {
+  FolderInput,
   Loader2,
   Monitor,
   MoreHorizontal,
@@ -188,6 +189,7 @@ function PluginList({
   const configurePlugin = usePluginManagementStore((state) => state.configurePlugin);
   const currentConfigScope = usePluginManagementStore((state) => state.configScope);
   const resetPluginConfig = usePluginManagementStore((state) => state.resetPluginConfig);
+  const syncFromLocalZcode = usePluginManagementStore((state) => state.syncFromLocalZcode);
   const togglingPluginId = usePluginManagementStore((state) => state.togglingPluginId);
   const operationId = usePluginManagementStore((state) => state.operationId);
   const [selectedPluginId, setSelectedPluginId] = useState<string | null>(null);
@@ -377,6 +379,64 @@ function PluginList({
     },
     [pluginManagementService, refreshAfterPluginChange, updatePlugin],
   );
+  const [syncingLocalZcode, setSyncingLocalZcode] = useState(false);
+  const handleSyncFromLocalZcode = useCallback(async () => {
+    if (syncingLocalZcode || !target || !targetServiceResolution.rpcReady) return;
+    setSyncingLocalZcode(true);
+    try {
+      const result = await syncFromLocalZcode(pluginManagementService);
+      if (!result) {
+        toast(
+          usePluginManagementStore.getState().error ??
+            intl.formatMessage({ id: "settings.plugins.localSync.failed" }),
+          { variant: "warning" },
+        );
+        return;
+      }
+      if (!result.officialCacheFound) {
+        toast(intl.formatMessage({ id: "settings.plugins.localSync.notFound" }), {
+          variant: "warning",
+        });
+        return;
+      }
+      if (result.synced.length > 0) {
+        toast(
+          intl.formatMessage(
+            { id: "settings.plugins.localSync.success" },
+            {
+              count: result.synced.length,
+            },
+          ),
+        );
+        return;
+      }
+      const versionMissing = result.skipped.filter(
+        (entry) => entry.reason === "official-version-missing",
+      ).length;
+      if (versionMissing > 0) {
+        toast(
+          intl.formatMessage(
+            { id: "settings.plugins.localSync.versionMissing" },
+            {
+              count: versionMissing,
+            },
+          ),
+          { variant: "warning" },
+        );
+        return;
+      }
+      toast(intl.formatMessage({ id: "settings.plugins.localSync.upToDate" }));
+    } finally {
+      setSyncingLocalZcode(false);
+    }
+  }, [
+    intl,
+    pluginManagementService,
+    syncFromLocalZcode,
+    syncingLocalZcode,
+    target,
+    targetServiceResolution.rpcReady,
+  ]);
   const selectedPlugin = plugins.find((plugin) => plugin.id === selectedPluginId) ?? null;
   // 插件自身 warning 诊断（如声明的技能路径扫描为空）：详情高级区展示，避免静默失败。
   const pluginWarningsForSelected = selectedPlugin
@@ -877,12 +937,34 @@ function PluginList({
       </div>
       {!hasEmptySearchResult && visibleBuiltInPlugins.length > 0 ? (
         <div className="space-y-4">
-          <h3 className="flex h-7 items-center gap-1.5 text-ui-base font-medium text-foreground">
-            {intl.formatMessage({ id: "settings.plugin.plugins.builtIn" })}
-            <span className="text-ui-sm font-normal text-foreground-subtle">
-              {visibleBuiltInPlugins.length}
-            </span>
-          </h3>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h3 className="flex h-7 items-center gap-1.5 text-ui-base font-medium text-foreground">
+              {intl.formatMessage({ id: "settings.plugin.plugins.builtIn" })}
+              <span className="text-ui-sm font-normal text-foreground-subtle">
+                {visibleBuiltInPlugins.length}
+              </span>
+            </h3>
+            {configScope === "user" && target ? (
+              <ControlHintTooltip
+                title={intl.formatMessage({ id: "settings.plugins.localSync.hint" })}
+              >
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={syncingLocalZcode || operationId !== null}
+                  data-testid="plugin-settings-local-sync"
+                  onClick={() => void handleSyncFromLocalZcode()}
+                >
+                  {syncingLocalZcode ? (
+                    <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <FolderInput className="size-3.5" aria-hidden="true" />
+                  )}
+                  {intl.formatMessage({ id: "settings.plugins.localSync.open" })}
+                </Button>
+              </ControlHintTooltip>
+            ) : null}
+          </div>
           {renderPluginRows(visibleBuiltInPlugins)}
         </div>
       ) : null}

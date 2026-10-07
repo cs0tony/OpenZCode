@@ -11,7 +11,10 @@ import {
 import { dirname, join, resolve, sep } from "node:path";
 import { writeBundledOfficialMarketplacePartitionSync } from "@zcode/adapters";
 import { ZCODE_OFFICIAL_PLUGIN_MARKETPLACE, type Logger } from "@zcode/contracts";
-import { isZCodeCuaInternalFeatureEnabled, ZCODE_CUA_OFFICIAL_PLUGIN_ID } from "@zcode/shared";
+import {
+  isZCodeCuaInternalFeatureEnabled,
+  ZCODE_CUA_OFFICIAL_PLUGIN_ID,
+} from "@zcode/shared";
 import {
   createOfficialPluginCacheRetryBudget,
   getOfficialPluginCacheRetryAttempts,
@@ -25,6 +28,7 @@ import {
   type OfficialPluginDefinition,
 } from "./official-plugin-definitions.js";
 import { writeOfficialPluginRuntimeManifest } from "./official-plugin-runtime.js";
+import { resolveOfficialZcodePluginCacheRoot } from "./paths.js";
 import {
   isOfficialPluginSeedLockTimeoutError,
   withOfficialPluginSeedLock,
@@ -71,7 +75,10 @@ interface OfficialPluginSeedPluginSource {
 }
 
 interface OfficialPluginSeedSource {
-  kind: "filesystem" | "sea";
+  // "local-zcode" 表示插件文件来自本机原版 ZCode 的官方插件缓存（一次性复制来源，
+  // specs/sync-official-plugins-from-local-zcode.md）。分片条目落盘时仍写 "filesystem"，
+  // 因为 resolvePluginSourceRoot 只认 filesystem/sea 的 cachePath 定位。
+  kind: "filesystem" | "sea" | "local-zcode";
   plugins: OfficialPluginSeedPluginSource[];
 }
 
@@ -89,22 +96,48 @@ interface SeaOfficialPluginManifest {
 type SeaModule = typeof import("node:sea");
 
 function seedBundledOfficialPlugins(input: {
+  env?: NodeJS.ProcessEnv;
   logger?: Logger;
   storageRoot: string;
 }): OfficialPluginDefinition[] {
-  const source = resolveSeedSource();
-  if (!source) return [];
+  const sources = collectStartupSeedSources(input.storageRoot, input.env);
+  if (sources.length === 0) return [];
+  return seedOfficialPluginsFromSources(input, sources);
+}
 
+/**
+ * 启动 seed 的源集合：本地源（SEA/仓库包）+ 此前经"从本地 ZCode 同步"复制进缓存的插件
+ * （按 marker 识别重建）。后者必须随每次启动重新写入 bundled 分片，否则只含本地源的
+ * 分区写会把已同步插件从商店目录里挤掉。
+ */
+function collectStartupSeedSources(
+  storageRoot: string,
+  env?: NodeJS.ProcessEnv,
+): OfficialPluginSeedSource[] {
+  const sources: OfficialPluginSeedSource[] = [];
+  const primary = resolveSeedSource();
+  const primaryNames = new Set(primary?.plugins.map((plugin) => plugin.definition.name) ?? []);
+  if (primary) sources.push(primary);
+  const synced = resolveLocalZcodeSyncedSource(storageRoot, primaryNames, env);
+  if (synced) sources.push(synced);
+  return sources;
+}
+
+function seedOfficialPluginsFromSources(
+  input: { logger?: Logger; storageRoot: string },
+  sources: OfficialPluginSeedSource[],
+): OfficialPluginDefinition[] {
   // Catalog/cache 是内置插件的不可变产品资产；Runtime 是否加载由 discovery 的抑制态决定，
   // 不能在 seed 阶段删除或过滤，否则卸载后详情页无法读取组件，也无法恢复。
-  writeOfficialMarketplace(input.storageRoot, source);
+  writeOfficialMarketplace(input.storageRoot, sources);
   const retryBudget = createOfficialPluginCacheRetryBudget();
   // 等锁超时降级后循环会继续；若每个插件独立重置 15s 等待预算，成组遗留的
   // 锁会让启动同步冻结 N×15s。全部插件共享同一截止时间：无争用的锁仍瞬时获取（mkdir
   // 一次成功不查预算），预算耗尽后有争用的锁立即降级，seeding 总等待封顶 15s。
   const seedLockDeadlineAt = Date.now() + SEED_LOCK_TOTAL_BUDGET_MS;
   const failedSeeds: OfficialPluginDefinition[] = [];
-  for (const plugin of source.plugins) {
+  for (const source of sources) {
+    for (const plugin of source.plugins) {
     const pluginId = `${plugin.definition.name}@${OFFICIAL_PLUGIN_MARKETPLACE}`;
     const targetRoot = officialPluginCacheRoot(input.storageRoot, plugin.definition);
     // 入口旁的插件拷贝可能与新定义错配（升级中的桌面包、旧 checkout 未构建 dist）。
@@ -206,6 +239,7 @@ function seedBundledOfficialPlugins(input: {
       }
       throw error;
     }
+    }
   }
   return failedSeeds;
 }
@@ -238,6 +272,7 @@ export function resolveOfficialPluginRoots(input: {
     suppressedBuiltins.add(ZCODE_CUA_OFFICIAL_PLUGIN_ID);
   }
   const failedSeeds = seedBundledOfficialPlugins({
+    env: input.env,
     logger: input.logger,
     storageRoot: input.storageRoot,
   });
@@ -311,6 +346,187 @@ function resolveFilesystemSeedSource(): OfficialPluginSeedSource | undefined {
     kind: "filesystem",
     plugins,
   };
+}
+
+/**
+ * 识别此前经"从本地 ZCode 同步"复制进本地缓存的插件并重建 seed 源。
+ * 复制产物自带 marker（source: "local-zcode"），文件内容与复制时一致，
+ * 因此按缓存目录重算的 hash 与 marker 匹配，seed 循环会走 isSeedCurrent 短路。
+ */
+function resolveLocalZcodeSyncedSource(
+  storageRoot: string,
+  excludeNames: ReadonlySet<string>,
+  env?: NodeJS.ProcessEnv,
+): OfficialPluginSeedSource | undefined {
+  const plugins = OFFICIAL_PLUGIN_DEFINITIONS.flatMap((definition) => {
+    if (excludeNames.has(definition.name)) return [];
+    if (
+      definition.name === ZCODE_CUA_OFFICIAL_PLUGIN_ID &&
+      !isZCodeCuaInternalFeatureEnabled(env ?? process.env)
+    ) {
+      return [];
+    }
+    const rootPath = officialPluginCacheRoot(storageRoot, definition);
+    const marker = readSeedMarker(rootPath);
+    if (marker?.source !== "local-zcode") return [];
+    if (!isSeedUsable(rootPath, definition)) return [];
+    const files = collectFilesystemPluginFiles(rootPath, definition);
+    return [
+      {
+        definition,
+        files,
+        hash: hashSeedFiles(files),
+        missingSeedPaths: findMissingOfficialPluginSeedPaths(definition, files),
+        rootPath,
+      },
+    ];
+  });
+  if (plugins.length === 0) return undefined;
+  return {
+    kind: "local-zcode",
+    plugins,
+  };
+}
+
+/** 从本机原版 ZCode 的官方插件缓存构建一次性复制源（仅解析出与定义版本一致的插件）。 */
+function resolveOfficialZcodeSeedSource(
+  officialCacheRoot: string,
+  excludeNames: ReadonlySet<string>,
+): OfficialPluginSeedSource {
+  const plugins = OFFICIAL_PLUGIN_DEFINITIONS.flatMap((definition) => {
+    if (excludeNames.has(definition.name)) return [];
+    const rootPath = join(officialCacheRoot, definition.name, definition.version);
+    if (!existsSync(join(rootPath, ".zcode-plugin", "plugin.json"))) return [];
+    const files = collectFilesystemPluginFiles(rootPath, definition);
+    return [
+      {
+        definition,
+        files,
+        hash: hashSeedFiles(files),
+        missingSeedPaths: findMissingOfficialPluginSeedPaths(definition, files),
+        rootPath,
+      },
+    ];
+  });
+  return {
+    kind: "local-zcode",
+    plugins,
+  };
+}
+
+function readSeedMarker(rootPath: string):
+  | { hash?: string; source?: string; pluginVersion?: string }
+  | undefined {
+  try {
+    const marker = JSON.parse(readFileSync(join(rootPath, SEED_MARKER_FILE), "utf8")) as {
+      hash?: unknown;
+      source?: unknown;
+      pluginVersion?: unknown;
+    };
+    return {
+      ...(typeof marker.hash === "string" ? { hash: marker.hash } : {}),
+      ...(typeof marker.source === "string" ? { source: marker.source } : {}),
+      ...(typeof marker.pluginVersion === "string" ? { pluginVersion: marker.pluginVersion } : {}),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+export interface OfficialPluginLocalZcodeSyncSkip {
+  plugin: string;
+  reason: string;
+}
+
+export interface OfficialPluginLocalZcodeSyncResult {
+  officialCacheFound: boolean;
+  officialCacheRoot?: string;
+  synced: string[];
+  skipped: OfficialPluginLocalZcodeSyncSkip[];
+}
+
+/**
+ * 从本机原版 ZCode 的官方插件缓存把缺失的内置插件复制进 OpenZCode 自己的缓存。
+ * 原版目录只作为一次性复制来源读取；产物与"真内置"插件同管线落盘（marker、
+ * 原子替换、bundled 分片），之后与 ~/.zcode 无任何运行时依赖。
+ */
+export function syncOfficialPluginsFromLocalZcodeCache(input: {
+  env?: NodeJS.ProcessEnv;
+  logger?: Logger;
+  pluginStorageRoot: string;
+  // 测试注入用；生产固定读官方 ZCode 的用户级缓存根。
+  officialCacheRoot?: string;
+}): OfficialPluginLocalZcodeSyncResult {
+  const officialCacheRoot = input.officialCacheRoot ?? resolveOfficialZcodePluginCacheRoot();
+  if (!existsSync(officialCacheRoot)) {
+    return { officialCacheFound: false, synced: [], skipped: [] };
+  }
+
+  const primary = resolveSeedSource();
+  const primaryNames = new Set(primary?.plugins.map((plugin) => plugin.definition.name) ?? []);
+  const alreadySyncedNames = new Set(
+    resolveLocalZcodeSyncedSource(
+      input.pluginStorageRoot,
+      primaryNames,
+      input.env,
+    )?.plugins.map((plugin) => plugin.definition.name) ?? [],
+  );
+  // CUA flag 关闭时不同步也不复制（与启动 seed 的 suppressed 语义一致），
+  // 必须在构建复制源之前加入排除集，否则官方缓存里的 CUA 会被照常复制。
+  const env = input.env ?? process.env;
+  const cuaFeatureDisabled =
+    !isZCodeCuaInternalFeatureEnabled(env) && !primaryNames.has(ZCODE_CUA_OFFICIAL_PLUGIN_ID);
+  const excludedNames = new Set([
+    ...primaryNames,
+    ...alreadySyncedNames,
+    ...(cuaFeatureDisabled ? [ZCODE_CUA_OFFICIAL_PLUGIN_ID] : []),
+  ]);
+
+  const skipped: OfficialPluginLocalZcodeSyncSkip[] = [];
+  for (const definition of OFFICIAL_PLUGIN_DEFINITIONS) {
+    if (excludedNames.has(definition.name)) {
+      skipped.push({
+        plugin: definition.name,
+        reason:
+          cuaFeatureDisabled && definition.name === ZCODE_CUA_OFFICIAL_PLUGIN_ID
+            ? "feature-disabled"
+            : "already-seeded",
+      });
+      continue;
+    }
+    if (!existsSync(join(officialCacheRoot, definition.name, definition.version))) {
+      skipped.push({ plugin: definition.name, reason: "official-version-missing" });
+    }
+  }
+
+  const localZcodeSource = resolveOfficialZcodeSeedSource(officialCacheRoot, excludedNames);
+  const sources: OfficialPluginSeedSource[] = [];
+  if (primary) sources.push(primary);
+  const syncedMarkerSource = resolveLocalZcodeSyncedSource(
+    input.pluginStorageRoot,
+    new Set([...primaryNames, ...localZcodeSource.plugins.map((plugin) => plugin.definition.name)]),
+    input.env,
+  );
+  if (syncedMarkerSource) sources.push(syncedMarkerSource);
+  if (localZcodeSource.plugins.length > 0) sources.push(localZcodeSource);
+
+  // 没有任何可 seed 的源时不动既有分片（与启动 seed 的 no-source 行为一致）。
+  if (sources.length === 0) {
+    return { officialCacheFound: true, officialCacheRoot, synced: [], skipped };
+  }
+
+  const failedSeeds = seedOfficialPluginsFromSources(
+    { logger: input.logger, storageRoot: input.pluginStorageRoot },
+    sources,
+  );
+  const failedNames = new Set(failedSeeds.map((definition) => definition.name));
+  for (const definition of failedSeeds) {
+    skipped.push({ plugin: definition.name, reason: "seed-failed" });
+  }
+  const synced = localZcodeSource.plugins
+    .map((plugin) => plugin.definition.name)
+    .filter((name) => !failedNames.has(name));
+  return { officialCacheFound: true, officialCacheRoot, synced, skipped };
 }
 
 function findMissingOfficialPluginSeedPaths(
@@ -396,7 +612,8 @@ function readSeedFileBytes(
   plugin: OfficialPluginSeedPluginSource,
   file: OfficialPluginSeedFile,
 ): Buffer {
-  if (source.kind === "filesystem" && file.sourcePath) return readFileSync(file.sourcePath);
+  // filesystem 与 local-zcode 的文件清单都带 sourcePath；SEA 文件无 sourcePath，走资产读取。
+  if (file.sourcePath) return readFileSync(file.sourcePath);
   const sea = getSeaModule();
   if (!sea?.isSea()) throw new Error("SEA plugin asset is unavailable outside SEA runtime.");
   return Buffer.from(
@@ -406,24 +623,30 @@ function readSeedFileBytes(
   );
 }
 
-function writeOfficialMarketplace(storageRoot: string, source: OfficialPluginSeedSource): void {
+function writeOfficialMarketplace(
+  storageRoot: string,
+  sources: OfficialPluginSeedSource[],
+): void {
   writeBundledOfficialMarketplacePartitionSync({
     manifest: {
       name: OFFICIAL_PLUGIN_MARKETPLACE,
-      plugins: source.plugins.map((plugin) => {
-        // 商店信息（listing）与描述随目录条目下发：键名与 CDN 目录 schema 一致，
-        // 由 adapter 的同一套 parseEntryStoreListing 解析，UI 才能给内置插件渲染
-        // 显示名/分类/作者/示例提示词。描述取自插件包内 plugin.json（单一事实源）。
-        const description = readSeedPluginDescription(source, plugin);
-        return {
-          cachePath: officialPluginCacheRoot(storageRoot, plugin.definition),
-          ...(description ? { description } : {}),
-          name: plugin.definition.name,
-          source: source.kind,
-          version: plugin.definition.version,
-          ...(plugin.definition.listing ?? {}),
-        };
-      }),
+      plugins: sources.flatMap((source) =>
+        source.plugins.map((plugin) => {
+          // 商店信息（listing）与描述随目录条目下发：键名与 CDN 目录 schema 一致，
+          // 由 adapter 的同一套 parseEntryStoreListing 解析，UI 才能给内置插件渲染
+          // 显示名/分类/作者/示例提示词。描述取自插件包内 plugin.json（单一事实源）。
+          const description = readSeedPluginDescription(source, plugin);
+          return {
+            cachePath: officialPluginCacheRoot(storageRoot, plugin.definition),
+            ...(description ? { description } : {}),
+            name: plugin.definition.name,
+            // local-zcode 源的插件已复制进本地缓存，来源语义与 filesystem 相同。
+            source: source.kind === "local-zcode" ? "filesystem" : source.kind,
+            version: plugin.definition.version,
+            ...(plugin.definition.listing ?? {}),
+          };
+        }),
+      ),
       version: 1,
     },
     storageRoot,

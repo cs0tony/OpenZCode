@@ -13,6 +13,8 @@
  * - `~/.agents/`、`~/.claude/`：跨工具生态标准目录，属显式互操作而非隐式共享；
  * - `zcode://` deep link：OAuth relay 页的服务端白名单契约，不随本地身份改变。
  *
+ * 本文件会被渲染进程打包（@zcode/shared index 可达），只允许纯常量；
+ * 涉及 node:os/node:path 的路径解析放消费方（如 bootstrap/app/paths.ts）。
  * 裁决记录见 specs/environment-isolation-from-zcode.md。
  */
 export const OPEN_ZCODE_DATA_DIR_NAME = ".openzcode";
@@ -22,3 +24,10 @@ export const OPEN_ZCODE_BETA_DATA_DIR_NAME = ".openzcode-beta";
 
 /** OpenZCode 主目录 scratch 工作区目录名（官方 ZCode 为 `ZCodeProject`）。 */
 export const OPEN_ZCODE_SCRATCH_WORKSPACE_DIR_NAME = "OpenZCodeProject";
+
+/**
+ * 官方 ZCode 的用户级数据根目录名（`~/.zcode`）。仅服务于"从本地 ZCode 复制
+ * 内置插件"的一次性只读场景（specs/sync-official-plugins-from-local-zcode.md）；
+ * 完整路径解析在 bootstrap/app/paths.ts（需要 node:os，不能进本文件）。
+ */
+export const OFFICIAL_ZCODE_DATA_DIR_NAME = ".zcode";

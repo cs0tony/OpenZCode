@@ -37,6 +37,7 @@ import type {
   ZCodeWorkflowsUpdateMetaResult,
   ZCodePluginsUninstallResult,
   ZCodePluginsRestoreBuiltinResult,
+  ZCodePluginsSyncOfficialFromLocalZcodeResult,
   ZCodePluginsConfigureResult,
   ZCodePluginsDescribeResult,
   ZCodePluginsValidateResult,
@@ -123,6 +124,7 @@ import type {
   ZCodeAgentResolveSuggestedPluginReferenceParams,
   ZCodeAgentRemovePluginMarketplaceParams,
   ZCodeAgentRestoreBuiltinPluginParams,
+  ZCodeAgentSyncOfficialFromLocalZcodeParams,
   ZCodeAgentSetPluginEnabledParams,
   ZCodeAgentSetAutomationEnabledParams,
   ZCodeAgentUninstallPluginParams,
@@ -666,6 +668,9 @@ export interface IZCodeAgentService {
   restoreBuiltinPlugin(
     params: ZCodeAgentRestoreBuiltinPluginParams,
   ): Promise<ZCodePluginsRestoreBuiltinResult>;
+  syncOfficialFromLocalZcode(
+    params: ZCodeAgentSyncOfficialFromLocalZcodeParams,
+  ): Promise<ZCodePluginsSyncOfficialFromLocalZcodeResult>;
   configurePlugin(params: ZCodeAgentConfigurePluginParams): Promise<ZCodePluginsConfigureResult>;
   resetPluginConfig(
     params: ZCodeAgentResetPluginConfigParams,

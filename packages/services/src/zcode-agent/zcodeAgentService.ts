@@ -52,6 +52,7 @@ import {
   zcodePluginsResolveSuggestedReferenceResultSchema,
   zcodePluginOperationProgressNotificationSchema,
   zcodePluginsRestoreBuiltinResultSchema,
+  zcodePluginsSyncOfficialFromLocalZcodeResultSchema,
   zcodePluginsSetEnabledResultSchema,
   zcodePluginsCancelOperationResultSchema,
   zcodePluginsUninstallResultSchema,
@@ -188,6 +189,7 @@ import type {
   ZCodeAgentUninstallPluginParams,
   ZCodeAgentUpdatePluginParams,
   ZCodeAgentRestoreBuiltinPluginParams,
+  ZCodeAgentSyncOfficialFromLocalZcodeParams,
   ZCodeAgentUpdatePluginMarketplaceParams,
   ZCodeAgentValidatePluginParams,
   ZCodeAgentDescribePluginParams,
@@ -603,7 +605,9 @@ function isProtocolRequestTimeout(error: unknown, method: string): boolean {
   if (error instanceof ZCodeProtocolRequestTimeoutError) {
     return error.method === method;
   }
-  return error instanceof Error && error.message === `OpenZCode Protocol request timed out: ${method}`;
+  return (
+    error instanceof Error && error.message === `OpenZCode Protocol request timed out: ${method}`
+  );
 }
 
 function assertV4AttachmentNdjsonEnvelope(method: string, params: unknown): void {
@@ -3380,7 +3384,9 @@ export function createZCodeAgentService(
         const providerNotReady = isProviderNotReadyError(error);
         logger[providerNotReady ? "info" : "warn"](
           undefined,
-          providerNotReady ? "OpenZCode agent 等待 provider/model 就绪" : "OpenZCode agent 初始化失败",
+          providerNotReady
+            ? "OpenZCode agent 等待 provider/model 就绪"
+            : "OpenZCode agent 初始化失败",
           {
             durationMs: Date.now() - startedAt,
             message: error instanceof Error ? error.message : String(error),
@@ -4178,6 +4184,18 @@ export function createZCodeAgentService(
       );
     },
 
+    async syncOfficialFromLocalZcode(params: ZCodeAgentSyncOfficialFromLocalZcodeParams) {
+      const client = await getPluginManagementClient();
+      return client.request(
+        zcodeProtocolMethods.pluginsSyncOfficialFromLocalZcode,
+        {
+          workspace: buildWorkspaceRef(params),
+        },
+        zcodePluginsSyncOfficialFromLocalZcodeResultSchema,
+        { timeoutMs: PLUGIN_MANAGEMENT_REQUEST_TIMEOUT_MS },
+      );
+    },
+
     async configurePlugin(params: ZCodeAgentConfigurePluginParams) {
       const client = await getPluginManagementClient();
       return client.request(
@@ -4699,7 +4717,9 @@ export function createZCodeAgentService(
           module: "services.zcode_agent",
           requestId: params.requestId,
         });
-        throw new Error(`OpenZCode session runtime preferences request not found: ${params.requestId}`);
+        throw new Error(
+          `OpenZCode session runtime preferences request not found: ${params.requestId}`,
+        );
       }
       const responseContext = {
         event: "zcode_agent.runtime_preferences.host_response_received",

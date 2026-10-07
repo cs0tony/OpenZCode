@@ -64,6 +64,8 @@ export interface ZCodeAgentRestoreBuiltinPluginParams extends ZCodeAgentWorkspac
   pluginId: string;
 }
 
+export interface ZCodeAgentSyncOfficialFromLocalZcodeParams extends ZCodeAgentWorkspaceTarget {}
+
 export interface ZCodeAgentConfigurePluginParams extends ZCodeAgentWorkspaceTarget {
   clearOptionKeys?: string[];
   dryRun?: boolean;

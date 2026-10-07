@@ -7,6 +7,7 @@ import type {
   ZCodePluginMarketplaceSummary,
   ZCodePluginScope,
   ZCodePluginsDescribeResult,
+  ZCodePluginsSyncOfficialFromLocalZcodeResult,
 } from "@zcode/shared";
 import type { IPluginManagementService } from "@zcode/services";
 import { logger } from "@/logger.js";
@@ -77,6 +78,10 @@ export interface PluginManagementState {
   ) => Promise<void>;
   updatePlugin: (pluginId: string, pluginService: IPluginManagementService) => Promise<void>;
   restoreBuiltin: (pluginId: string, pluginService: IPluginManagementService) => Promise<void>;
+  /** 从本机原版 ZCode 一次性复制缺失的内置插件；未检测到官方目录时结果带 officialCacheFound=false。 */
+  syncFromLocalZcode: (
+    pluginService: IPluginManagementService,
+  ) => Promise<ZCodePluginsSyncOfficialFromLocalZcodeResult | undefined>;
   configurePlugin: (
     pluginId: string,
     options: Record<string, string | number | boolean>,
@@ -311,6 +316,22 @@ export const usePluginManagementStore = create<PluginManagementState>((set, get)
         await pluginService.restoreBuiltinPlugin({ ...workspace, pluginId });
       },
     );
+  },
+
+  async syncFromLocalZcode(pluginService) {
+    // 同步结果（found/synced/skipped）需要回传给调用方展示 toast，
+    // 借闭包带出；失败路径仍走 runWorkspaceOperation 的统一 error 态。
+    let result: ZCodePluginsSyncOfficialFromLocalZcodeResult | undefined;
+    const succeeded = await runWorkspaceOperation(
+      set,
+      get,
+      pluginService,
+      "plugin:syncOfficialFromLocalZcode",
+      async (workspace) => {
+        result = await pluginService.syncOfficialFromLocalZcode({ ...workspace });
+      },
+    );
+    return succeeded ? result : undefined;
   },
 
   async configurePlugin(pluginId, options, pluginService, scope = "user", clearOptionKeys = []) {
