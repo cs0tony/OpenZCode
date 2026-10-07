@@ -9,3 +9,8 @@ third-party/upstream/** -text -whitespace
 third-party/native-search/licenses/** -text -whitespace
 third-party/runtime/*.txt -text -whitespace
 third-party/inventory.json linguist-generated=true
+
+# 构建生成的 dist-types 声明固定 LF：Windows core.autocrlf 会在 checkout 时写成 CRLF，
+# 而 dev:desktop:prod 重新构建时又把这些文件重写为 LF，两边字节不一致导致
+# git status 恒报 modified（实际内容与 HEAD 完全相同，仅换行符差异）。
+**/dist-types/*.d.ts text eol=lf
