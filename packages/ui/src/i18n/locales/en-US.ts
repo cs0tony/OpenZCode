@@ -2574,6 +2574,34 @@ const enUS: Record<string, string> = {
   "settings.plugins.localSync.versionMissing":
     "{count} plugins have no matching version in local ZCode and were skipped.",
   "settings.plugins.localSync.failed": "Failed to sync built-in plugins.",
+  // Built-in plugin sync history (specs/official-plugin-sync-history.md).
+  "settings.plugins.syncHistory.open": "Sync history",
+  "settings.plugins.syncHistory.title": "Built-in plugin sync history",
+  "settings.plugins.syncHistory.description":
+    "Every sync from local ZCode backs up the current built-in plugins first. Activate a history entry to roll back entirely.",
+  "settings.plugins.syncHistory.empty":
+    "No sync history yet. The pre-sync state will be recorded after your first sync.",
+  "settings.plugins.syncHistory.kind.initial": "Initial state",
+  "settings.plugins.syncHistory.kind.preSync": "Pre-sync backup",
+  "settings.plugins.syncHistory.currentBadge": "Current state",
+  "settings.plugins.syncHistory.pluginCount": "{count} plugins",
+  "settings.plugins.syncHistory.activate": "Activate",
+  "settings.plugins.syncHistory.activated": "Rolled back to the selected history state.",
+  "settings.plugins.syncHistory.failed": "Failed to activate the history state.",
+  "settings.plugins.pluginHistory.menu": "Version history",
+  "settings.plugins.pluginHistory.title": "{plugin} version history",
+  "settings.plugins.pluginHistory.description":
+    "Restore a version from the sync history backups, or remove this plugin to return to the unsynced state.",
+  "settings.plugins.pluginHistory.empty": "No history backups for this plugin yet.",
+  "settings.plugins.pluginHistory.capturedAt": "Backed up at {time}",
+  "settings.plugins.pluginHistory.currentBadge": "Current version",
+  "settings.plugins.pluginHistory.activate": "Restore this version",
+  "settings.plugins.pluginHistory.activated": "Restored the historical version.",
+  "settings.plugins.pluginHistory.removed": "Plugin removed. Sync again anytime to bring it back.",
+  "settings.plugins.pluginHistory.remove": "Remove plugin",
+  "settings.plugins.pluginHistory.removeHint":
+    "Roll back to the unsynced state (sync again to restore)",
+  "settings.plugins.pluginHistory.failed": "Failed to restore the historical version.",
   "settings.plugins.remoteSync.optionsSummary":
     "Options: {syncable} will be attempted; {manual} require manual setup on remote",
   "settings.plugins.remoteSync.resultEmpty": "No plugin sync results were returned.",

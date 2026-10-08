@@ -33,6 +33,7 @@ import {
   isOfficialPluginSeedLockTimeoutError,
   withOfficialPluginSeedLock,
 } from "./official-plugin-seed-lock.js";
+import { recordOfficialPluginSyncHistorySnapshot } from "./official-plugin-sync-history.js";
 
 const OFFICIAL_PLUGIN_MARKETPLACE = ZCODE_OFFICIAL_PLUGIN_MARKETPLACE;
 const SEA_PLUGIN_ASSET_PREFIX = "zcode-official-plugins/";
@@ -72,6 +73,10 @@ interface OfficialPluginSeedPluginSource {
   hash: string;
   missingSeedPaths: string[];
   rootPath?: string;
+  // 缓存原生（同步历史回退识别，specs/official-plugin-sync-history.md）：目录即事实源，
+  // seed 循环跳过复制/替换；分片条目按 resolvedVersion/rootPath 写实际值（诚实标签）。
+  cacheNative?: boolean;
+  resolvedVersion?: string;
 }
 
 interface OfficialPluginSeedSource {
@@ -106,6 +111,23 @@ function seedBundledOfficialPlugins(input: {
 }
 
 /**
+ * 缓存目录被外部流程（同步历史激活/单插件回退，specs/official-plugin-sync-history.md）
+ * 改动后，复用启动管线重建 bundled 分片并 re-seed 本地源插件，无需重启即让商店
+ * 与插件列表反映新状态。与启动 seed 的差异：sources 为空时仍写空分片——回退到
+ * "未同步任何插件"的初始状态必须把旧条目从商店列表里清掉，而不是保留陈旧分片。
+ */
+export function refreshBundledOfficialPlugins(input: {
+  env?: NodeJS.ProcessEnv;
+  logger?: Logger;
+  storageRoot: string;
+}): void {
+  const sources = collectStartupSeedSources(input.storageRoot, input.env);
+  writeOfficialMarketplace(input.storageRoot, sources);
+  if (sources.length === 0) return;
+  seedOfficialPluginsFromSources(input, sources);
+}
+
+/**
  * 启动 seed 的源集合：本地源（SEA/仓库包）+ 此前经"从本地 ZCode 同步"复制进缓存的插件
  * （按 marker 识别重建）。后者必须随每次启动重新写入 bundled 分片，否则只含本地源的
  * 分区写会把已同步插件从商店目录里挤掉。
@@ -118,7 +140,11 @@ function collectStartupSeedSources(
   const primary = resolveSeedSource();
   const primaryNames = new Set(primary?.plugins.map((plugin) => plugin.definition.name) ?? []);
   if (primary) sources.push(primary);
-  const synced = resolveLocalZcodeSyncedSource(storageRoot, primaryNames, env);
+  // 启动/刷新呈现走 fallback 识别：定义版本路径缺 marker 时，回退到同插件名下
+  // 最新的 local-zcode 旧版本目录（同步历史回退后的诚实呈现，分片写实际版本）。
+  const synced = resolveLocalZcodeSyncedSource(storageRoot, primaryNames, env, {
+    recognizeFallback: true,
+  });
   if (synced) sources.push(synced);
   return sources;
 }
@@ -140,6 +166,26 @@ function seedOfficialPluginsFromSources(
     for (const plugin of source.plugins) {
     const pluginId = `${plugin.definition.name}@${OFFICIAL_PLUGIN_MARKETPLACE}`;
     const targetRoot = officialPluginCacheRoot(input.storageRoot, plugin.definition);
+    // 缓存原生（同步历史回退识别）插件的目录即事实源，识别时已做可用性校验；
+    // 不进入复制/替换循环，仅尽力补写运行时 manifest（对象副本可能带旧运行时指向）。
+    if (plugin.cacheNative === true && plugin.rootPath !== undefined) {
+      try {
+        writeOfficialPluginRuntimeManifest({
+          pluginName: plugin.definition.name,
+          retryBudget,
+          rootPath: plugin.rootPath,
+        });
+      } catch (error) {
+        input.logger?.warn("Official plugin cache operation degraded", {
+          error: error as NodeJS.ErrnoException,
+          module: "bootstrap.official_plugin_cache",
+          operation: "seed_plugin",
+          pluginId,
+          targetRoot: plugin.rootPath,
+        });
+      }
+      continue;
+    }
     // 入口旁的插件拷贝可能与新定义错配（升级中的桌面包、旧 checkout 未构建 dist）。
     // 缺 requiredSeedPaths 时 seed 源解析曾直接抛错，一个残缺插件把全部插件连同会话恢复
     // 一起炸成 resumeFailed。残缺只作用于单插件：拒绝写缓存，按既有降级协议告警并回退到可用旧缓存。
@@ -352,11 +398,17 @@ function resolveFilesystemSeedSource(): OfficialPluginSeedSource | undefined {
  * 识别此前经"从本地 ZCode 同步"复制进本地缓存的插件并重建 seed 源。
  * 复制产物自带 marker（source: "local-zcode"），文件内容与复制时一致，
  * 因此按缓存目录重算的 hash 与 marker 匹配，seed 循环会走 isSeedCurrent 短路。
+ *
+ * recognizeFallback（specs/official-plugin-sync-history.md）：定义版本路径上无
+ * local-zcode marker 时，回退到同插件名下最新可用的 local-zcode 旧版本目录，
+ * 以 cacheNative 条目参与分片（写实际版本与路径）。仅用于呈现；同步"只补缺失"
+ * 的 gate 必须传 false——fallback 识别的旧版本不算已同步，不阻止升级。
  */
 function resolveLocalZcodeSyncedSource(
   storageRoot: string,
   excludeNames: ReadonlySet<string>,
   env?: NodeJS.ProcessEnv,
+  options?: { recognizeFallback?: boolean },
 ): OfficialPluginSeedSource | undefined {
   const plugins = OFFICIAL_PLUGIN_DEFINITIONS.flatMap((definition) => {
     if (excludeNames.has(definition.name)) return [];
@@ -366,18 +418,33 @@ function resolveLocalZcodeSyncedSource(
     ) {
       return [];
     }
-    const rootPath = officialPluginCacheRoot(storageRoot, definition);
-    const marker = readSeedMarker(rootPath);
-    if (marker?.source !== "local-zcode") return [];
-    if (!isSeedUsable(rootPath, definition)) return [];
-    const files = collectFilesystemPluginFiles(rootPath, definition);
+    const definitionRoot = officialPluginCacheRoot(storageRoot, definition);
+    const definitionMarker = readSeedMarker(definitionRoot);
+    if (definitionMarker?.source === "local-zcode" && isSeedUsable(definitionRoot, definition)) {
+      const files = collectFilesystemPluginFiles(definitionRoot, definition);
+      return [
+        {
+          definition,
+          files,
+          hash: hashSeedFiles(files),
+          missingSeedPaths: findMissingOfficialPluginSeedPaths(definition, files),
+          rootPath: definitionRoot,
+        },
+      ];
+    }
+    if (options?.recognizeFallback !== true) return [];
+    const fallback = findNewestLocalZcodeFallbackDir(dirname(definitionRoot), definition);
+    if (!fallback) return [];
+    const files = collectFilesystemPluginFiles(fallback.rootPath, definition);
     return [
       {
+        cacheNative: true,
         definition,
         files,
         hash: hashSeedFiles(files),
         missingSeedPaths: findMissingOfficialPluginSeedPaths(definition, files),
-        rootPath,
+        resolvedVersion: fallback.version,
+        rootPath: fallback.rootPath,
       },
     ];
   });
@@ -386,6 +453,41 @@ function resolveLocalZcodeSyncedSource(
     kind: "local-zcode",
     plugins,
   };
+}
+
+/** 同插件名下（按版本号降序）最新的可用 local-zcode 旧版本目录。 */
+function findNewestLocalZcodeFallbackDir(
+  pluginVersionsDir: string,
+  definition: OfficialPluginDefinition,
+): { rootPath: string; version: string } | undefined {
+  let entries;
+  try {
+    entries = readdirSync(pluginVersionsDir, { withFileTypes: true });
+  } catch {
+    return undefined;
+  }
+  return entries
+    .filter(
+      (entry) =>
+        entry.isDirectory() &&
+        entry.name !== definition.version &&
+        // 锁目录、事务 backup 与临时目录不是候选；与 findUsableOfficialPluginFallback
+        // 的排除规则保持一致。
+        !entry.name.includes(".backup") &&
+        !entry.name.includes(".seed-lock") &&
+        !entry.name.includes(".tmp-"),
+    )
+    .sort((left, right) =>
+      right.name.localeCompare(left.name, undefined, { numeric: true, sensitivity: "base" }),
+    )
+    .map((entry) => ({
+      rootPath: join(pluginVersionsDir, entry.name),
+      version: entry.name,
+    }))
+    .find((candidate) => {
+      const marker = readSeedMarker(candidate.rootPath);
+      return marker?.source === "local-zcode" && isSeedUsable(candidate.rootPath, definition);
+    });
 }
 
 /** 从本机原版 ZCode 的官方插件缓存构建一次性复制源（仅解析出与定义版本一致的插件）。 */
@@ -464,12 +566,12 @@ export function syncOfficialPluginsFromLocalZcodeCache(input: {
 
   const primary = resolveSeedSource();
   const primaryNames = new Set(primary?.plugins.map((plugin) => plugin.definition.name) ?? []);
+  // 同步 gate："已同步"只认定义版本路径上的 marker。同步历史 sibling fallback
+  // 识别的旧版本目录不算已同步——再次同步要能照常升级到定义版本。
   const alreadySyncedNames = new Set(
-    resolveLocalZcodeSyncedSource(
-      input.pluginStorageRoot,
-      primaryNames,
-      input.env,
-    )?.plugins.map((plugin) => plugin.definition.name) ?? [],
+    resolveLocalZcodeSyncedSource(input.pluginStorageRoot, primaryNames, input.env, {
+      recognizeFallback: false,
+    })?.plugins.map((plugin) => plugin.definition.name) ?? [],
   );
   // CUA flag 关闭时不同步也不复制（与启动 seed 的 suppressed 语义一致），
   // 必须在构建复制源之前加入排除集，否则官方缓存里的 CUA 会被照常复制。
@@ -502,13 +604,23 @@ export function syncOfficialPluginsFromLocalZcodeCache(input: {
   const localZcodeSource = resolveOfficialZcodeSeedSource(officialCacheRoot, excludedNames);
   const sources: OfficialPluginSeedSource[] = [];
   if (primary) sources.push(primary);
+  // 分片呈现源走 fallback 识别：已回退到旧版本的插件也要继续出现在分片里。
   const syncedMarkerSource = resolveLocalZcodeSyncedSource(
     input.pluginStorageRoot,
     new Set([...primaryNames, ...localZcodeSource.plugins.map((plugin) => plugin.definition.name)]),
     input.env,
+    { recognizeFallback: true },
   );
   if (syncedMarkerSource) sources.push(syncedMarkerSource);
-  if (localZcodeSource.plugins.length > 0) sources.push(localZcodeSource);
+  if (localZcodeSource.plugins.length > 0) {
+    // specs/official-plugin-sync-history.md：写任何缓存目录前先快照当前 local-zcode
+    // 状态；快照失败中止同步（不允许没备份就改缓存，手动操作可重试）。
+    recordOfficialPluginSyncHistorySnapshot({
+      logger: input.logger,
+      pluginStorageRoot: input.pluginStorageRoot,
+    });
+    sources.push(localZcodeSource);
+  }
 
   // 没有任何可 seed 的源时不动既有分片（与启动 seed 的 no-source 行为一致）。
   if (sources.length === 0) {
@@ -627,26 +739,36 @@ function writeOfficialMarketplace(
   storageRoot: string,
   sources: OfficialPluginSeedSource[],
 ): void {
+  const entriesByName = new Map<string, { cacheNative: boolean; entry: Record<string, unknown> }>();
+  for (const source of sources) {
+    for (const plugin of source.plugins) {
+      // 缓存原生（同步历史回退识别）条目写实际版本与实际路径；其余条目一律定位到
+      // 定义版本路径（bundled 分片是 scanOfficialCache 的权威清单）。
+      const cacheNative = plugin.cacheNative === true && plugin.rootPath !== undefined;
+      // 商店信息（listing）与描述随目录条目下发：键名与 CDN 目录 schema 一致，
+      // 由 adapter 的同一套 parseEntryStoreListing 解析，UI 才能给内置插件渲染
+      // 显示名/分类/作者/示例提示词。描述取自插件包内 plugin.json（单一事实源）。
+      const description = readSeedPluginDescription(source, plugin);
+      const entry = {
+        cachePath: cacheNative ? plugin.rootPath! : officialPluginCacheRoot(storageRoot, plugin.definition),
+        ...(description ? { description } : {}),
+        name: plugin.definition.name,
+        // local-zcode 源的插件已复制进本地缓存，来源语义与 filesystem 相同。
+        source: source.kind === "local-zcode" ? "filesystem" : source.kind,
+        version: cacheNative ? plugin.resolvedVersion! : plugin.definition.version,
+        ...(plugin.definition.listing ?? {}),
+      };
+      const existing = entriesByName.get(plugin.definition.name);
+      // 同名去重：定义版本路径条目优先于 cacheNative（fallback 识别）条目，同类先到先得。
+      if (!existing || (existing.cacheNative && !cacheNative)) {
+        entriesByName.set(plugin.definition.name, { cacheNative, entry });
+      }
+    }
+  }
   writeBundledOfficialMarketplacePartitionSync({
     manifest: {
       name: OFFICIAL_PLUGIN_MARKETPLACE,
-      plugins: sources.flatMap((source) =>
-        source.plugins.map((plugin) => {
-          // 商店信息（listing）与描述随目录条目下发：键名与 CDN 目录 schema 一致，
-          // 由 adapter 的同一套 parseEntryStoreListing 解析，UI 才能给内置插件渲染
-          // 显示名/分类/作者/示例提示词。描述取自插件包内 plugin.json（单一事实源）。
-          const description = readSeedPluginDescription(source, plugin);
-          return {
-            cachePath: officialPluginCacheRoot(storageRoot, plugin.definition),
-            ...(description ? { description } : {}),
-            name: plugin.definition.name,
-            // local-zcode 源的插件已复制进本地缓存，来源语义与 filesystem 相同。
-            source: source.kind === "local-zcode" ? "filesystem" : source.kind,
-            version: plugin.definition.version,
-            ...(plugin.definition.listing ?? {}),
-          };
-        }),
-      ),
+      plugins: [...entriesByName.values()].map((item) => item.entry),
       version: 1,
     },
     storageRoot,

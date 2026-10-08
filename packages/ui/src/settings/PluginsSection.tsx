@@ -3,6 +3,7 @@ import { PluginAddMenu } from "@/settings/PluginAddMenu.js";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import {
   FolderInput,
+  History,
   Loader2,
   Monitor,
   MoreHorizontal,
@@ -39,6 +40,7 @@ import { SettingsSearchInput } from "@/settings/SettingsSearchInput.js";
 import { SettingsResourceHeaderActions } from "@/settings/SettingsResourceHeaderActions.js";
 import { PluginStoreAvatar } from "@/settings/PluginStoreAvatar.js";
 import { PluginUninstallConfirmDialog } from "@/settings/PluginUninstallConfirmDialog.js";
+import { OfficialSyncHistoryDialog } from "@/settings/OfficialSyncHistoryDialog.js";
 import { PluginInstallEmptyState, PluginLoadingState } from "@/settings/PluginInstallEmptyState.js";
 import {
   PluginDetailRow,
@@ -380,6 +382,10 @@ function PluginList({
     [pluginManagementService, refreshAfterPluginChange, updatePlugin],
   );
   const [syncingLocalZcode, setSyncingLocalZcode] = useState(false);
+  // 同步历史面板：null=整表历史；指定插件=该插件的历史版本（specs/official-plugin-sync-history.md）。
+  const [historyDialog, setHistoryDialog] = useState<
+    { mode: "all" } | { label: string; mode: "plugin"; name: string } | null
+  >(null);
   const handleSyncFromLocalZcode = useCallback(async () => {
     if (syncingLocalZcode || !target || !targetServiceResolution.rpcReady) return;
     setSyncingLocalZcode(true);
@@ -453,6 +459,11 @@ function PluginList({
   useEffect(() => {
     closeDetail();
   }, [closeDetail, targetKey]);
+  // 历史/回退面板归属具体目标（本地或远端 Host），目标切换后必须关闭，避免
+  // 下一次激活动作发到另一个 Host。
+  useEffect(() => {
+    setHistoryDialog(null);
+  }, [targetKey]);
   useEffect(() => {
     if (selectedPluginId && !selectedPlugin) closeDetail();
   }, [closeDetail, selectedPlugin, selectedPluginId]);
@@ -541,7 +552,10 @@ function PluginList({
     });
   }, [initialize, pluginManagementService, configScope, target, targetServiceResolution.rpcReady]);
 
-  const renderPluginRows = (items: ZCodePluginInfo[]) => (
+  const renderPluginRows = (
+    items: ZCodePluginInfo[],
+    options?: { onOpenPluginHistory?: (plugin: ZCodePluginInfo) => void },
+  ) => (
     <div className="overflow-hidden rounded-xl bg-surface">
       {items.map((plugin, index) => (
         <Fragment key={plugin.id}>
@@ -635,6 +649,16 @@ function PluginList({
                       {intl.formatMessage({
                         id: "settings.plugins.scope.restoreUserDefault",
                       })}
+                    </DropdownMenuItem>
+                  ) : null}
+                  {options?.onOpenPluginHistory ? (
+                    <DropdownMenuItem
+                      disabled={operationId !== null}
+                      data-testid="plugin-settings-plugin-history-menu"
+                      onSelect={() => options.onOpenPluginHistory?.(plugin)}
+                    >
+                      <History className="size-4" aria-hidden="true" />
+                      {intl.formatMessage({ id: "settings.plugins.pluginHistory.menu" })}
                     </DropdownMenuItem>
                   ) : null}
                   <DropdownMenuItem
@@ -945,27 +969,52 @@ function PluginList({
               </span>
             </h3>
             {configScope === "user" && target ? (
-              <ControlHintTooltip
-                title={intl.formatMessage({ id: "settings.plugins.localSync.hint" })}
-              >
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={syncingLocalZcode || operationId !== null}
-                  data-testid="plugin-settings-local-sync"
-                  onClick={() => void handleSyncFromLocalZcode()}
+              <>
+                <ControlHintTooltip
+                  title={intl.formatMessage({ id: "settings.plugins.localSync.hint" })}
                 >
-                  {syncingLocalZcode ? (
-                    <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
-                  ) : (
-                    <FolderInput className="size-3.5" aria-hidden="true" />
-                  )}
-                  {intl.formatMessage({ id: "settings.plugins.localSync.open" })}
-                </Button>
-              </ControlHintTooltip>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={syncingLocalZcode || operationId !== null}
+                    data-testid="plugin-settings-local-sync"
+                    onClick={() => void handleSyncFromLocalZcode()}
+                  >
+                    {syncingLocalZcode ? (
+                      <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                    ) : (
+                      <FolderInput className="size-3.5" aria-hidden="true" />
+                    )}
+                    {intl.formatMessage({ id: "settings.plugins.localSync.open" })}
+                  </Button>
+                </ControlHintTooltip>
+                <ControlHintTooltip
+                  title={intl.formatMessage({ id: "settings.plugins.syncHistory.open" })}
+                >
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon-md"
+                    disabled={syncingLocalZcode || operationId !== null}
+                    aria-label={intl.formatMessage({ id: "settings.plugins.syncHistory.open" })}
+                    data-testid="plugin-settings-sync-history"
+                    onClick={() => setHistoryDialog({ mode: "all" })}
+                  >
+                    <History className="size-3.5" aria-hidden="true" />
+                  </Button>
+                </ControlHintTooltip>
+              </>
             ) : null}
           </div>
-          {renderPluginRows(visibleBuiltInPlugins)}
+          {renderPluginRows(visibleBuiltInPlugins, {
+            onOpenPluginHistory: (plugin) =>
+              setHistoryDialog({
+                label: resolveManagedPluginDisplay(plugin, storeItemById.get(plugin.id), locale)
+                  .name,
+                mode: "plugin",
+                name: plugin.name,
+              }),
+          })}
         </div>
       ) : null}
       {showUnavailableComputerUse ? (
@@ -992,6 +1041,17 @@ function PluginList({
         onCancel={uninstall.cancelUninstall}
         onConfirm={() => void uninstall.confirmUninstall()}
       />
+      {target && targetServiceResolution.rpcReady ? (
+        <OfficialSyncHistoryDialog
+          open={historyDialog !== null}
+          onOpenChange={(open) => {
+            if (!open) setHistoryDialog(null);
+          }}
+          pluginName={historyDialog?.mode === "plugin" ? historyDialog.name : undefined}
+          pluginLabel={historyDialog?.mode === "plugin" ? historyDialog.label : undefined}
+          pluginService={pluginManagementService}
+        />
+      ) : null}
       <RemoteSyncDialogs
         canSyncSkills={false}
         canSyncMcp={false}

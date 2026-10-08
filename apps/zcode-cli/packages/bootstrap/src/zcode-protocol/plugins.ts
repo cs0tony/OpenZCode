@@ -14,6 +14,9 @@ import {
   zcodePluginsDescribeParamsSchema,
   zcodePluginsRestoreBuiltinParamsSchema,
   zcodePluginsSyncOfficialFromLocalZcodeParamsSchema,
+  zcodePluginsListOfficialSyncHistoryParamsSchema,
+  zcodePluginsActivateOfficialSyncHistoryEntryParamsSchema,
+  zcodePluginsActivateOfficialPluginHistoryVersionParamsSchema,
   type ZCodeAvailablePluginSummary,
   type ZCodeInstalledPluginSummary,
   type ZCodePluginComponentGroup,
@@ -23,8 +26,10 @@ import {
   type ZCodePluginsConfigureResult,
   type ZCodePluginsDescribeResult,
   type ZCodePluginsInstallResult,
+  type ZCodePluginsListOfficialSyncHistoryResult,
   type ZCodePluginsListResult,
   type ZCodePluginsMarketplaceMutationResult,
+  type ZCodePluginsOfficialSyncActivationResult,
   type ZCodePluginsOverviewResult,
   type ZCodePluginsRestoreBuiltinResult,
   type ZCodePluginsSyncOfficialFromLocalZcodeResult,
@@ -52,7 +57,12 @@ import { listInstalledPluginRecords } from "@zcode/adapters/plugins";
 import { withPluginStorageLock } from "../lib/plugin-storage-lock.js";
 import { getCliStorageRoot, getPluginStorageRoot } from "../app/paths.js";
 import { resolveOfficialPluginHostMcpServerNames } from "../app/official-plugin-definitions.js";
-import { syncOfficialPluginsFromLocalZcodeCache } from "../app/bundled-plugins.js";
+import { syncOfficialPluginsFromLocalZcodeCache, refreshBundledOfficialPlugins } from "../app/bundled-plugins.js";
+import {
+  activateOfficialPluginHistoryVersion as activateOfficialPluginHistoryVersionCore,
+  activateOfficialSyncHistoryEntry as activateOfficialSyncHistoryEntryCore,
+  listOfficialPluginSyncHistory,
+} from "../app/official-plugin-sync-history.js";
 import { createConfig, resolvePath, type ConfigResult } from "@zcode/adapters/config";
 import { parseParams, type ZCodeProtocolAgentServerContext } from "./server-types.js";
 
@@ -442,6 +452,56 @@ export async function syncOfficialFromLocalZcode(
     logger: context.logger,
     pluginStorageRoot,
   });
+}
+
+// 同步历史（specs/official-plugin-sync-history.md）：历史只读写 ~/.openzcode 自身
+// 插件目录；激活在目录对账后必须复用启动管线重建 bundled 分片，商店/插件列表才能
+// 无重启反映新状态。
+export async function listOfficialSyncHistory(
+  context: ZCodeProtocolAgentServerContext,
+  rawParams: unknown,
+): Promise<ZCodePluginsListOfficialSyncHistoryResult> {
+  const params = parseParams(zcodePluginsListOfficialSyncHistoryParamsSchema, rawParams);
+  const pluginStorageRoot = resolvePluginStorageRoot(params.workspace.workspacePath);
+  return listOfficialPluginSyncHistory({ pluginStorageRoot });
+}
+
+export async function activateOfficialSyncHistoryEntry(
+  context: ZCodeProtocolAgentServerContext,
+  rawParams: unknown,
+): Promise<ZCodePluginsOfficialSyncActivationResult> {
+  const params = parseParams(
+    zcodePluginsActivateOfficialSyncHistoryEntryParamsSchema,
+    rawParams,
+  );
+  const pluginStorageRoot = resolvePluginStorageRoot(params.workspace.workspacePath);
+  const result = activateOfficialSyncHistoryEntryCore({
+    entryId: params.entryId,
+    logger: context.logger,
+    pluginStorageRoot,
+  });
+  refreshBundledOfficialPlugins({ logger: context.logger, storageRoot: pluginStorageRoot });
+  return result;
+}
+
+export async function activateOfficialPluginHistoryVersion(
+  context: ZCodeProtocolAgentServerContext,
+  rawParams: unknown,
+): Promise<ZCodePluginsOfficialSyncActivationResult> {
+  const params = parseParams(
+    zcodePluginsActivateOfficialPluginHistoryVersionParamsSchema,
+    rawParams,
+  );
+  const pluginStorageRoot = resolvePluginStorageRoot(params.workspace.workspacePath);
+  const result = activateOfficialPluginHistoryVersionCore({
+    hash: params.hash,
+    logger: context.logger,
+    plugin: params.plugin,
+    pluginStorageRoot,
+    version: params.version,
+  });
+  refreshBundledOfficialPlugins({ logger: context.logger, storageRoot: pluginStorageRoot });
+  return result;
 }
 
 export async function configurePlugin(

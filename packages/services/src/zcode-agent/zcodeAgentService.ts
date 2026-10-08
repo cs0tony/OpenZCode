@@ -53,6 +53,8 @@ import {
   zcodePluginOperationProgressNotificationSchema,
   zcodePluginsRestoreBuiltinResultSchema,
   zcodePluginsSyncOfficialFromLocalZcodeResultSchema,
+  zcodePluginsListOfficialSyncHistoryResultSchema,
+  zcodePluginsOfficialSyncActivationResultSchema,
   zcodePluginsSetEnabledResultSchema,
   zcodePluginsCancelOperationResultSchema,
   zcodePluginsUninstallResultSchema,
@@ -190,6 +192,9 @@ import type {
   ZCodeAgentUpdatePluginParams,
   ZCodeAgentRestoreBuiltinPluginParams,
   ZCodeAgentSyncOfficialFromLocalZcodeParams,
+  ZCodeAgentListOfficialSyncHistoryParams,
+  ZCodeAgentActivateOfficialSyncHistoryEntryParams,
+  ZCodeAgentActivateOfficialPluginHistoryVersionParams,
   ZCodeAgentUpdatePluginMarketplaceParams,
   ZCodeAgentValidatePluginParams,
   ZCodeAgentDescribePluginParams,
@@ -4193,6 +4198,51 @@ export function createZCodeAgentService(
         },
         zcodePluginsSyncOfficialFromLocalZcodeResultSchema,
         { timeoutMs: PLUGIN_MANAGEMENT_REQUEST_TIMEOUT_MS },
+      );
+    },
+
+    async listOfficialSyncHistory(params: ZCodeAgentListOfficialSyncHistoryParams) {
+      const client = await getPluginManagementClient();
+      return client.request(
+        zcodeProtocolMethods.pluginsListOfficialSyncHistory,
+        {
+          workspace: buildWorkspaceRef(params),
+        },
+        zcodePluginsListOfficialSyncHistoryResultSchema,
+        { timeoutMs: PLUGIN_MANAGEMENT_REQUEST_TIMEOUT_MS },
+      );
+    },
+
+    async activateOfficialSyncHistoryEntry(
+      params: ZCodeAgentActivateOfficialSyncHistoryEntryParams,
+    ) {
+      const client = await getPluginManagementClient();
+      return client.request(
+        zcodeProtocolMethods.pluginsActivateOfficialSyncHistoryEntry,
+        {
+          workspace: buildWorkspaceRef(params),
+          entryId: params.entryId,
+        },
+        zcodePluginsOfficialSyncActivationResultSchema,
+        // 激活要重建 bundled 分片并 re-seed 本地源插件，耗时高于普通读操作。
+        { timeoutMs: Math.max(PLUGIN_MANAGEMENT_REQUEST_TIMEOUT_MS, 60_000) },
+      );
+    },
+
+    async activateOfficialPluginHistoryVersion(
+      params: ZCodeAgentActivateOfficialPluginHistoryVersionParams,
+    ) {
+      const client = await getPluginManagementClient();
+      return client.request(
+        zcodeProtocolMethods.pluginsActivateOfficialPluginHistoryVersion,
+        {
+          workspace: buildWorkspaceRef(params),
+          plugin: params.plugin,
+          ...(params.version !== undefined ? { version: params.version } : {}),
+          ...(params.hash !== undefined ? { hash: params.hash } : {}),
+        },
+        zcodePluginsOfficialSyncActivationResultSchema,
+        { timeoutMs: Math.max(PLUGIN_MANAGEMENT_REQUEST_TIMEOUT_MS, 60_000) },
       );
     },
 

@@ -20,6 +20,8 @@ import type {
   ZCodePluginsReferenceCatalogResult,
   ZCodePluginsRestoreBuiltinResult,
   ZCodePluginsSyncOfficialFromLocalZcodeResult,
+  ZCodePluginsListOfficialSyncHistoryResult,
+  ZCodePluginsOfficialSyncActivationResult,
   ZCodePluginsSetEnabledResult,
   ZCodePluginsUninstallResult,
   ZCodePluginsValidateResult,
@@ -40,6 +42,9 @@ import type {
   ZCodeAgentRestoreBuiltinPluginParams,
   ZCodeAgentSetPluginEnabledParams,
   ZCodeAgentSyncOfficialFromLocalZcodeParams,
+  ZCodeAgentListOfficialSyncHistoryParams,
+  ZCodeAgentActivateOfficialSyncHistoryEntryParams,
+  ZCodeAgentActivateOfficialPluginHistoryVersionParams,
   ZCodeAgentUninstallPluginParams,
   ZCodeAgentUpdatePluginMarketplaceParams,
   ZCodeAgentUpdatePluginParams,
@@ -84,6 +89,15 @@ export interface IPluginManagementService {
   syncOfficialFromLocalZcode(
     params: ZCodeAgentSyncOfficialFromLocalZcodeParams,
   ): Promise<ZCodePluginsSyncOfficialFromLocalZcodeResult>;
+  listOfficialSyncHistory(
+    params: ZCodeAgentListOfficialSyncHistoryParams,
+  ): Promise<ZCodePluginsListOfficialSyncHistoryResult>;
+  activateOfficialSyncHistoryEntry(
+    params: ZCodeAgentActivateOfficialSyncHistoryEntryParams,
+  ): Promise<ZCodePluginsOfficialSyncActivationResult>;
+  activateOfficialPluginHistoryVersion(
+    params: ZCodeAgentActivateOfficialPluginHistoryVersionParams,
+  ): Promise<ZCodePluginsOfficialSyncActivationResult>;
   configurePlugin(params: ZCodeAgentConfigurePluginParams): Promise<ZCodePluginsConfigureResult>;
   resetPluginConfig(
     params: ZCodeAgentResetPluginConfigParams,

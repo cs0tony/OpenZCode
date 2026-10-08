@@ -3269,6 +3269,93 @@ export type ZCodePluginsSyncOfficialFromLocalZcodeResult = z.infer<
   typeof zcodePluginsSyncOfficialFromLocalZcodeResultSchema
 >;
 
+// 官方内置插件同步历史（specs/official-plugin-sync-history.md）：
+// 同步前快照 + 历史激活（整表回退）/ 单插件回退到历史版本。
+export const zcodeOfficialSyncHistoryPluginStateSchema = z
+  .object({
+    plugin: nonEmptyString,
+    version: nonEmptyString,
+    hash: nonEmptyString,
+  })
+  .strict();
+export type ZCodeOfficialSyncHistoryPluginState = z.infer<
+  typeof zcodeOfficialSyncHistoryPluginStateSchema
+>;
+
+export const zcodeOfficialSyncHistoryEntrySchema = z
+  .object({
+    id: nonEmptyString,
+    createdAt: nonEmptyString,
+    kind: z.enum(["initial", "pre-sync"]),
+    plugins: z.array(zcodeOfficialSyncHistoryPluginStateSchema),
+  })
+  .strict();
+export type ZCodeOfficialSyncHistoryEntry = z.infer<typeof zcodeOfficialSyncHistoryEntrySchema>;
+
+export const zcodePluginsListOfficialSyncHistoryParamsSchema = z
+  .object({
+    workspace: zcodeWorkspaceRefSchema,
+  })
+  .strict();
+export type ZCodePluginsListOfficialSyncHistoryParams = z.infer<
+  typeof zcodePluginsListOfficialSyncHistoryParamsSchema
+>;
+
+export const zcodePluginsListOfficialSyncHistoryResultSchema = z
+  .object({
+    // 当前磁盘上全部 local-zcode 目录（含未被分片引用的旧版本目录）。
+    current: z.array(zcodeOfficialSyncHistoryPluginStateSchema),
+    // bundled 分片当前实际列出的 local-zcode 状态（"当前状态"徽标与单插件"当前版本"以此为准）。
+    active: z.array(zcodeOfficialSyncHistoryPluginStateSchema),
+    entries: z.array(zcodeOfficialSyncHistoryEntrySchema),
+  })
+  .strict();
+export type ZCodePluginsListOfficialSyncHistoryResult = z.infer<
+  typeof zcodePluginsListOfficialSyncHistoryResultSchema
+>;
+
+export const zcodePluginsActivateOfficialSyncHistoryEntryParamsSchema = z
+  .object({
+    workspace: zcodeWorkspaceRefSchema,
+    entryId: nonEmptyString,
+  })
+  .strict();
+export type ZCodePluginsActivateOfficialSyncHistoryEntryParams = z.infer<
+  typeof zcodePluginsActivateOfficialSyncHistoryEntryParamsSchema
+>;
+
+export const zcodeOfficialSyncActivationFailureSchema = z.object({
+  plugin: nonEmptyString,
+  reason: nonEmptyString,
+});
+export const zcodePluginsOfficialSyncActivationResultSchema = z
+  .object({
+    activated: z.array(nonEmptyString),
+    failed: z.array(zcodeOfficialSyncActivationFailureSchema),
+    removed: z.array(nonEmptyString),
+  })
+  .strict();
+export type ZCodePluginsOfficialSyncActivationResult = z.infer<
+  typeof zcodePluginsOfficialSyncActivationResultSchema
+>;
+
+export const zcodePluginsActivateOfficialPluginHistoryVersionParamsSchema = z
+  .object({
+    workspace: zcodeWorkspaceRefSchema,
+    plugin: nonEmptyString,
+    // version/hash 同有同无；同缺表示"移除此插件"（回退到未同步状态）。
+    hash: nonEmptyString.optional(),
+    version: nonEmptyString.optional(),
+  })
+  .strict()
+  .refine(
+    (params) => (params.version !== undefined) === (params.hash !== undefined),
+    "version and hash must be provided together",
+  );
+export type ZCodePluginsActivateOfficialPluginHistoryVersionParams = z.infer<
+  typeof zcodePluginsActivateOfficialPluginHistoryVersionParamsSchema
+>;
+
 export const zcodePluginsConfigureParamsSchema = z
   .object({
     workspace: zcodeWorkspaceRefSchema,
@@ -3664,6 +3751,9 @@ export const zcodeProtocolMethods = {
   pluginsUpdate: "plugins/update",
   pluginsRestoreBuiltin: "plugins/restoreBuiltin",
   pluginsSyncOfficialFromLocalZcode: "plugins/syncOfficialFromLocalZcode",
+  pluginsListOfficialSyncHistory: "plugins/listOfficialSyncHistory",
+  pluginsActivateOfficialSyncHistoryEntry: "plugins/activateOfficialSyncHistoryEntry",
+  pluginsActivateOfficialPluginHistoryVersion: "plugins/activateOfficialPluginHistoryVersion",
   pluginsConfigure: "plugins/configure",
   pluginsResetConfig: "plugins/resetConfig",
   pluginsValidate: "plugins/validate",

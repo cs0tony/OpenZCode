@@ -66,6 +66,19 @@ export interface ZCodeAgentRestoreBuiltinPluginParams extends ZCodeAgentWorkspac
 
 export interface ZCodeAgentSyncOfficialFromLocalZcodeParams extends ZCodeAgentWorkspaceTarget {}
 
+export interface ZCodeAgentListOfficialSyncHistoryParams extends ZCodeAgentWorkspaceTarget {}
+
+export interface ZCodeAgentActivateOfficialSyncHistoryEntryParams extends ZCodeAgentWorkspaceTarget {
+  entryId: string;
+}
+
+export interface ZCodeAgentActivateOfficialPluginHistoryVersionParams extends ZCodeAgentWorkspaceTarget {
+  plugin: string;
+  /** version/hash 同缺表示"移除此插件"（回退到未同步状态）。 */
+  hash?: string;
+  version?: string;
+}
+
 export interface ZCodeAgentConfigurePluginParams extends ZCodeAgentWorkspaceTarget {
   clearOptionKeys?: string[];
   dryRun?: boolean;

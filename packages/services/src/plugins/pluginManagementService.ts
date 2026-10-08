@@ -22,6 +22,9 @@ interface PluginManagementServiceDependencies {
     | "updatePlugin"
     | "restoreBuiltinPlugin"
     | "syncOfficialFromLocalZcode"
+    | "listOfficialSyncHistory"
+    | "activateOfficialSyncHistoryEntry"
+    | "activateOfficialPluginHistoryVersion"
     | "configurePlugin"
     | "resetPluginConfig"
     | "validatePlugin"
@@ -50,6 +53,10 @@ export function createPluginManagementService(
     updatePlugin: (params) => agent.updatePlugin(params),
     restoreBuiltinPlugin: (params) => agent.restoreBuiltinPlugin(params),
     syncOfficialFromLocalZcode: (params) => agent.syncOfficialFromLocalZcode(params),
+    listOfficialSyncHistory: (params) => agent.listOfficialSyncHistory(params),
+    activateOfficialSyncHistoryEntry: (params) => agent.activateOfficialSyncHistoryEntry(params),
+    activateOfficialPluginHistoryVersion: (params) =>
+      agent.activateOfficialPluginHistoryVersion(params),
     configurePlugin: (params) => agent.configurePlugin(params),
     resetPluginConfig: (params) => agent.resetPluginConfig(params),
     validatePlugin: (params) => agent.validatePlugin(params),

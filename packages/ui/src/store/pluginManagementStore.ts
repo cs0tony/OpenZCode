@@ -13,6 +13,14 @@ import type { IPluginManagementService } from "@zcode/services";
 import { logger } from "@/logger.js";
 import { loadInto, runWorkspaceOperation } from "@/store/pluginManagementStoreLoading.js";
 import { setPluginEnabledOptimistically } from "@/store/pluginManagementStoreEnabled.js";
+import {
+  activateOfficialPluginHistoryVersion as activateOfficialPluginHistoryVersionSlice,
+  activateOfficialSyncHistoryEntry as activateOfficialSyncHistoryEntrySlice,
+  createInitialOfficialSyncHistoryCache,
+  loadOfficialSyncHistory as loadOfficialSyncHistorySlice,
+  type OfficialSyncHistoryCache,
+} from "@/store/pluginManagementStoreSyncHistory.js";
+import { describePlugin as describePluginSlice } from "@/store/pluginManagementStoreDescribe.js";
 
 // 市场详情按需拉取的组件清单缓存：按 pluginId 记 loading/data/error，避免重复请求与切换闪烁。
 export interface PluginDescribeEntry {
@@ -36,6 +44,8 @@ export interface PluginManagementState {
   installedPlugins: ZCodeInstalledPluginSummary[];
   restorableBuiltins: ZCodeAvailablePluginSummary[];
   diagnostics: ZCodePluginDiagnostic[];
+  /** 同步历史缓存；随目标懒加载，目标切换后重置。 */
+  officialSyncHistory: OfficialSyncHistoryCache;
   loading: boolean;
   error: string | null;
   /**
@@ -82,6 +92,18 @@ export interface PluginManagementState {
   syncFromLocalZcode: (
     pluginService: IPluginManagementService,
   ) => Promise<ZCodePluginsSyncOfficialFromLocalZcodeResult | undefined>;
+  // 同步历史（specs/official-plugin-sync-history.md）：实现见 pluginManagementStoreSyncHistory。
+  loadOfficialSyncHistory: (pluginService: IPluginManagementService) => Promise<void>;
+  activateOfficialSyncHistoryEntry: (
+    entryId: string,
+    pluginService: IPluginManagementService,
+  ) => Promise<boolean>;
+  activateOfficialPluginHistoryVersion: (
+    plugin: string,
+    version: string | undefined,
+    hash: string | undefined,
+    pluginService: IPluginManagementService,
+  ) => Promise<boolean>;
   configurePlugin: (
     pluginId: string,
     options: Record<string, string | number | boolean>,
@@ -140,6 +162,7 @@ export const usePluginManagementStore = create<PluginManagementState>((set, get)
   operationId: null,
   operationVersion: 0,
   describeCache: {},
+  officialSyncHistory: createInitialOfficialSyncHistoryCache(),
 
   async initialize({ workspacePath, workspaceIdentity, configScope, pluginService }) {
     const normalizedIdentity = workspaceIdentity?.trim() || null;
@@ -167,6 +190,9 @@ export const usePluginManagementStore = create<PluginManagementState>((set, get)
       // 旧层的 operationId 不能继续把新层的输入控件置灰。旧操作结束时由版本号防止
       // 它误清理新层后来启动的同名操作。
       ...(contextChanged ? { operationId: null } : {}),
+      // 同步历史归属具体 Host（本地或远端）：目标变化后旧数据不再可用，
+      // 由历史面板打开时按新目标重新懒加载。
+      ...(contextChanged ? { officialSyncHistory: createInitialOfficialSyncHistoryCache() } : {}),
     });
     await loadInto(set, get, {
       workspacePath,
@@ -331,7 +357,29 @@ export const usePluginManagementStore = create<PluginManagementState>((set, get)
         result = await pluginService.syncOfficialFromLocalZcode({ ...workspace });
       },
     );
+    // 同步成功意味着产生了新的历史条目（specs/official-plugin-sync-history.md），
+    // 让已打开的历史面板下次展示时重新拉取。
+    if (succeeded) set({ officialSyncHistory: { ...get().officialSyncHistory, loaded: false } });
     return succeeded ? result : undefined;
+  },
+
+  async loadOfficialSyncHistory(pluginService) {
+    await loadOfficialSyncHistorySlice(set, get, pluginService);
+  },
+
+  async activateOfficialSyncHistoryEntry(entryId, pluginService) {
+    return activateOfficialSyncHistoryEntrySlice(set, get, entryId, pluginService);
+  },
+
+  async activateOfficialPluginHistoryVersion(plugin, version, hash, pluginService) {
+    return activateOfficialPluginHistoryVersionSlice(
+      set,
+      get,
+      plugin,
+      version,
+      hash,
+      pluginService,
+    );
   },
 
   async configurePlugin(pluginId, options, pluginService, scope = "user", clearOptionKeys = []) {
@@ -391,55 +439,8 @@ export const usePluginManagementStore = create<PluginManagementState>((set, get)
     return setPluginEnabledOptimistically(set, get, pluginId, enabled, pluginService, scope);
   },
 
+  // 按需拉取插件组件清单（名称+描述）；force 跳过缓存重试。实现见 pluginManagementStoreDescribe。
   async describePlugin(pluginId, pluginName, marketplace, pluginService, force = false) {
-    const { workspacePath, workspaceIdentity, describeCache } = get();
-    if (!workspacePath) return;
-    const cached = describeCache[pluginId];
-    // 已加载或正在加载时命中缓存，不重复请求；force 时强制重试。
-    if (!force && cached && cached.status !== "error") return;
-    set({
-      describeCache: { ...get().describeCache, [pluginId]: { status: "loading" } },
-    });
-    try {
-      const data = await pluginService.describePlugin({
-        workspacePath,
-        ...(workspaceIdentity ? { workspaceIdentity } : {}),
-        marketplace,
-        pluginName,
-      });
-      const blockingDiagnostic = data.diagnostics?.find(
-        (diagnostic) => diagnostic.severity === "error",
-      );
-      if (data.components.length === 0 && blockingDiagnostic) {
-        // CLI 的 describe 对不可解析来源采用 diagnostics 回包而非 RPC reject。
-        // 旧 UI 把该回包缓存为 loaded，详情只显示空白且永远没有重试入口；这里将无组件的
-        // error diagnostic 映射成可恢复错误态，同时保留正常的部分成功回包。
-        set({
-          describeCache: {
-            ...get().describeCache,
-            [pluginId]: { status: "error", error: blockingDiagnostic.message },
-          },
-        });
-        return;
-      }
-      set({
-        describeCache: {
-          ...get().describeCache,
-          [pluginId]: { status: "loaded", data },
-        },
-      });
-    } catch (error) {
-      logger.error("[plugins] describe failed", {
-        pluginId,
-        marketplace,
-        error: toMessage(error),
-      });
-      set({
-        describeCache: {
-          ...get().describeCache,
-          [pluginId]: { status: "error", error: toMessage(error) },
-        },
-      });
-    }
+    await describePluginSlice(set, get, pluginId, pluginName, marketplace, pluginService, force);
   },
 }));
