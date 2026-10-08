@@ -7,6 +7,7 @@ import type {
   ZCodePluginStoreListing,
 } from "@zcode/shared";
 import {
+  DEFAULT_PLUGIN_MARKETPLACE_IDS,
   sortPluginStoreEntries,
   compareDocumentPluginPriority,
   resolvePluginStoreCategory as resolveStoreCategory,
@@ -14,7 +15,6 @@ import {
   isPublicStoreMarketplaceId,
   resolveLocalizedText,
   resolvePluginDisplayName,
-  ZCODE_OFFICIAL_PLUGIN_MARKETPLACE_ID,
 } from "@zcode/shared";
 import { pluginSearchMatches } from "@/settings/pluginSearch.js";
 
@@ -154,7 +154,8 @@ export interface PersonalMarketplaceGroup {
   items: StorePluginItem[];
 }
 
-const OFFICIAL_MARKETPLACE_ORDER: readonly string[] = [ZCODE_OFFICIAL_PLUGIN_MARKETPLACE_ID];
+/** 市场源置顶顺序：全部默认市场按 shared 清单顺序固定在前（specs/default-plugin-marketplaces.md）。 */
+const OFFICIAL_MARKETPLACE_ORDER: readonly string[] = DEFAULT_PLUGIN_MARKETPLACE_IDS;
 
 /**
  * 市场源管理排序：官方源固定置顶；自定义源按最近刷新时间倒序，未刷新过的沉底。

@@ -7,8 +7,12 @@
 ### 市场与来源
 
 **Official Marketplace（官方市场）**:
-OpenZCode 官方运营的唯一分发渠道，市场 id 为 `zcode-plugins-official`，内容 = 内置插件 + CDN 插件。是"分发渠道"而非"作者归属"——其中可以收录社区作者的插件。
+OpenZCode 官方运营的唯一分发渠道，市场 id 为 `zcode-plugins-official`，内容 = 内置插件 + CDN 插件。是"分发渠道"而非"作者归属"——其中可以收录社区作者的插件。也是唯一进入 Public Segment 的市场。
 _Avoid_: "官方"泛指一切受信市场
+
+**Default Marketplace（默认市场）**:
+随应用预置、启动时自动登记且不可移除的市场来源（specs/default-plugin-marketplaces.md）：官方市场 `zcode-plugins-official` 与 Claude Code 扩展目录 `claude-plugins-official`。默认市场不等于官方市场——后者是唯一公开分发渠道，claude 目录的插件展示在 Personal Segment。
+_Avoid_: 把 claude-plugins-official 称作官方市场；预装市场
 
 **Builtin Plugin（内置插件）**:
 随应用包一起分发、启动时播种进官方市场的插件。是官方插件的子集。
@@ -23,7 +27,7 @@ _Avoid_: 网络插件、在线插件
 _Avoid_: 无
 
 **Catalog Auto-Refresh（目录自动刷新）**:
-进入商店页时对 Official Marketplace 目录的节流后台刷新，用户无感知；只覆盖官方市场。
+进入商店页时对全部 Default Marketplace 目录的节流后台刷新，用户无感知、按市场各自记账。
 _Avoid_: 与 Manual Refresh 混用；把它称作"检查更新"（更新角标只是刷新的副产物）
 
 **Manual Refresh（手动刷新）**:

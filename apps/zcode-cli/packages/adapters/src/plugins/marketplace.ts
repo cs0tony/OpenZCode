@@ -5,7 +5,11 @@ import { basename, dirname, join, resolve } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { PluginDiagnostic, PluginManifest, PluginStoreListing } from "@zcode/contracts";
-import { isOfficialMarketplaceId, ZCODE_OFFICIAL_PLUGIN_MARKETPLACE } from "@zcode/contracts";
+import {
+  CLAUDE_OFFICIAL_PLUGIN_MARKETPLACE,
+  isOfficialMarketplaceId,
+  ZCODE_OFFICIAL_PLUGIN_MARKETPLACE,
+} from "@zcode/contracts";
 import { DEFAULT_PLUGIN_MARKETPLACES, sanitizeZCodeRuntimeEnv } from "@zcode/shared";
 import { loadPluginMcpServerDefinitions, resolvePluginMcpServers } from "./mcp.js";
 import {
@@ -50,6 +54,13 @@ const MARKETPLACE_FILE = "marketplace.json";
 const MARKETPLACE_JSON_MAX_BYTES = 10 * 1024 * 1024;
 const MARKETPLACE_JSON_MAX_REDIRECTS = 5;
 const MARKETPLACE_JSON_TIMEOUT_MS = 180_000;
+// Claude 上游目录不含图标；官方桌面端的插件图标由客户端物化目录时按 Z.ai CDN 图标名单合并
+// （specs/default-plugin-marketplaces.md「目录图标注入」）。名单超时独立设短值：
+// 图标缺失只是展示降级，不能把 CDN 抖动放大成一次完整市场刷新的等待时长。
+const CLAUDE_ICON_ASSETS_BASE_URL = "https://cdn-zcode.z.ai/zcode/official-plugin/assets/";
+const CLAUDE_ICON_SOURCES_URL = `${CLAUDE_ICON_ASSETS_BASE_URL}icon-sources.json`;
+const CLAUDE_ICON_SOURCES_CACHE_FILE = "icon-sources.json";
+const CLAUDE_ICON_SOURCES_TIMEOUT_MS = 5_000;
 const CLAUDE_MARKETPLACE_FILE = join(".claude-plugin", "marketplace.json");
 const ZCODE_MANIFEST_PATH = join(".zcode-plugin", "plugin.json");
 const CLAUDE_MANIFEST_PATH = join(".claude-plugin", "plugin.json");
@@ -338,6 +349,8 @@ export async function addMarketplace(input: {
   //   - 非官方市场日后把 manifest 改名成官方 id，刷新时 trustedId 不匹配 → 拒绝；
   // 非官方 manifest 名不受此约束，保持既有行为。
   trustedId?: string;
+  /** 测试注入用；生产固定走 requestMarketplaceJson 拉 Z.ai CDN 的图标名单。 */
+  fetchIconSources?: (url: string, signal?: AbortSignal) => Promise<unknown>;
 }): Promise<KnownMarketplaceRecord> {
   // persist:false 先只解析 manifest，不落盘——否则 marketplace 目录激活会用
   // 不可信 manifest.name 作为 target，先 rm 掉本地官方目录再 cp，等守卫抛错时
@@ -370,6 +383,21 @@ export async function addMarketplace(input: {
       throw new Error(
         `Official marketplace source must provide ${ZCODE_OFFICIAL_PLUGIN_MARKETPLACE}, received ${loaded.manifest.name}`,
       );
+    }
+    // Claude 上游目录不含图标；官方桌面端的图标由客户端物化目录时按 Z.ai CDN 名单合并。
+    // 只认 claude 官方 id（zcode CDN 目录条目自带 icon，不需要也不应重复注入）；
+    // 名单失败只降级为无图标，绝不阻塞安装/刷新（specs/default-plugin-marketplaces.md）。
+    if (loaded.manifest.name === CLAUDE_OFFICIAL_PLUGIN_MARKETPLACE) {
+      const icons = await loadClaudeIconSources(
+        input.storageRoot,
+        operationSignal,
+        input.fetchIconSources,
+      );
+      if (icons.size > 0) {
+        applyIconSourcesToManifestRaw(loaded.manifest.raw, icons);
+        // raw 已补 icon，重解析让条目 listing 携带 icon 进入协议/UI 投影。
+        loaded.manifest = parseRequiredMarketplaceManifest(loaded.manifest.raw);
+      }
     }
     const persistedManifest =
       loaded.manifest.name === ZCODE_OFFICIAL_PLUGIN_MARKETPLACE
@@ -491,6 +519,82 @@ async function requestMarketplaceJson(
 
 function isMarketplaceJsonRedirectStatus(status: number): boolean {
   return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
+}
+
+/**
+ * 解析 Claude 图标名单 JSON（`[{name, icon, mimeType}, ...]`）。条目形状不合法的跳过；
+ * 整体不是数组视为无名单。icon 与 name 都要求非空字符串，避免脏数据产出坏 URL。
+ */
+export function parseIconSourcesJson(value: unknown): Map<string, string> {
+  const icons = new Map<string, string>();
+  if (!Array.isArray(value)) return icons;
+  for (const entry of value) {
+    if (!isRecord(entry)) continue;
+    const name = entry.name;
+    const icon = entry.icon;
+    if (typeof name !== "string" || name.trim().length === 0) continue;
+    if (typeof icon !== "string" || icon.trim().length === 0) continue;
+    icons.set(name.trim(), icon.trim());
+  }
+  return icons;
+}
+
+/**
+ * 按插件名把 CDN 图标 URL 合并进目录条目 raw（原地替换 plugins 数组）。
+ * 条目已带 icon 时不覆盖——上游未来自带图标时以目录自身为准；
+ * 相对路径拼 assets 基址，http(s) 绝对地址原样使用。名单为空是合法降级，直接跳过。
+ */
+export function applyIconSourcesToManifestRaw(
+  raw: Record<string, unknown>,
+  icons: ReadonlyMap<string, string>,
+): void {
+  if (icons.size === 0 || !Array.isArray(raw.plugins)) return;
+  raw.plugins = raw.plugins.map((entry) => {
+    if (!isRecord(entry)) return entry;
+    if (typeof entry.icon === "string" && entry.icon.trim().length > 0) return entry;
+    const name = typeof entry.name === "string" ? entry.name : undefined;
+    const iconPath = name ? icons.get(name) : undefined;
+    if (!iconPath) return entry;
+    const icon =
+      iconPath.startsWith("http://") || iconPath.startsWith("https://")
+        ? iconPath
+        : `${CLAUDE_ICON_ASSETS_BASE_URL}${iconPath}`;
+    return { ...entry, icon };
+  });
+}
+
+/**
+ * 取 Claude 图标名单：先试 CDN（短超时），成功且非空才写缓存；失败回退上次成功名单
+ * （`<storageRoot>/icon-sources.json`，与官方 ZCode 同布局），两者皆无则返回空。
+ * 任何失败都只降级为"无图标"，绝不抛错阻塞市场安装/刷新。
+ */
+async function loadClaudeIconSources(
+  storageRoot: string,
+  signal?: AbortSignal,
+  fetchJson: (url: string, signal?: AbortSignal) => Promise<unknown> = (url, fetchSignal) =>
+    requestMarketplaceJson(url, undefined, fetchSignal, CLAUDE_ICON_SOURCES_TIMEOUT_MS),
+): Promise<Map<string, string>> {
+  const cachePath = join(storageRoot, CLAUDE_ICON_SOURCES_CACHE_FILE);
+  try {
+    const fetched = parseIconSourcesJson(
+      await fetchJson(CLAUDE_ICON_SOURCES_URL, signal),
+    );
+    if (fetched.size > 0) {
+      // 只在拿到有效名单时覆盖缓存：CDN 返回空/坏数据时保留上一份可用名单。
+      await writeJsonFile(
+        cachePath,
+        [...fetched].map(([name, icon]) => ({ icon, name })),
+      );
+      return fetched;
+    }
+  } catch {
+    // CDN 不可达/超时：走缓存降级。
+  }
+  try {
+    return parseIconSourcesJson(JSON.parse(await readFile(cachePath, "utf8")) as unknown);
+  } catch {
+    return new Map();
+  }
 }
 
 export async function updateMarketplace(input: {

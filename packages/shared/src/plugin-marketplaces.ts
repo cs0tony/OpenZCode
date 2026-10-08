@@ -9,6 +9,13 @@ export interface DefaultPluginMarketplace {
 
 export const ZCODE_OFFICIAL_PLUGIN_MARKETPLACE_ID = "zcode-plugins-official";
 
+/**
+ * Claude Code 官方扩展目录市场，随应用预置（specs/default-plugin-marketplaces.md）。
+ * 与 zcode-plugins-official 同为默认市场：保留 id、不可移除、目录自动刷新；
+ * 但不进商店"公开分段"（PUBLIC_STORE_MARKETPLACE_IDS 仍只有 OpenZCode 官方市场）。
+ */
+export const CLAUDE_OFFICIAL_PLUGIN_MARKETPLACE_ID = "claude-plugins-official";
+
 /** Settings 三类资源发现共用；Bootstrap 单测与官方 definition 的 defaultEnabled 机械对照。 */
 export const DEFAULT_ENABLED_OFFICIAL_PLUGIN_IDS: ReadonlySet<string> = new Set([
   "browser-use@zcode-plugins-official",
@@ -36,10 +43,27 @@ export const DEFAULT_PLUGIN_MARKETPLACES: DefaultPluginMarketplace[] = [
     id: ZCODE_OFFICIAL_PLUGIN_MARKETPLACE_ID,
     source: "https://cdn-zcode.z.ai/zcode/official-plugin/marketplace.json",
     name: ZCODE_OFFICIAL_PLUGIN_MARKETPLACE_ID,
-    description: "Official OpenZCode plugins marketplace: built-in and community plugins for OpenZCode.",
+    description:
+      "Official OpenZCode plugins marketplace: built-in and community plugins for OpenZCode.",
+    pluginCount: 0,
+  },
+  {
+    // Claude Code 官方扩展目录（specs/default-plugin-marketplaces.md）：预置来源，
+    // 目录走商店"个人分段"按市场分组展示。source 用 org/repo 缩写，
+    // 由 adapter 的 defaultMarketplaceSourceFromString 解析为 github source。
+    id: CLAUDE_OFFICIAL_PLUGIN_MARKETPLACE_ID,
+    source: "anthropics/claude-plugins-official",
+    name: CLAUDE_OFFICIAL_PLUGIN_MARKETPLACE_ID,
+    description:
+      "Directory of popular Claude Code extensions including development tools, productivity plugins, and MCP integrations",
     pluginCount: 0,
   },
 ];
+
+/** 默认市场 id（保持清单顺序）。不可移除判定与目录自动刷新以此为准。 */
+export const DEFAULT_PLUGIN_MARKETPLACE_IDS: readonly string[] = DEFAULT_PLUGIN_MARKETPLACES.map(
+  (marketplace) => marketplace.id,
+);
 
 // 商店「公开」分段只有一个 OpenZCode 官方市场 id，内置与 CDN 不再拆分身份。
 export const PUBLIC_STORE_MARKETPLACE_IDS = [ZCODE_OFFICIAL_PLUGIN_MARKETPLACE_ID] as const;

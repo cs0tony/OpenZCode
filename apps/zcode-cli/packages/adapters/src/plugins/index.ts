@@ -53,6 +53,7 @@ import type {
 
 export {
   addMarketplace,
+  applyIconSourcesToManifestRaw,
   describeMarketplacePlugin,
   ensureDefaultPluginMarketplaces,
   ensureMarketplaceManifestAvailable,
@@ -63,6 +64,7 @@ export {
   loadMarketplaceManifestSync,
   normalizeAuthorValue,
   parseEntryStoreListing,
+  parseIconSourcesJson,
   parseMarketplaceSourceInput,
   readPluginSourceIdentityPin,
   readPluginSourceSha,
