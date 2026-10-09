@@ -15,6 +15,7 @@ OpenZCode is an AI coding workspace with desktop, browser, and terminal interfac
 
 ## Updates
 
+- 2026-10-9: Updated to OpenZCode v3.14.4.
 - 2026-9-23: Updated to OpenZCode v3.14.3.
 
 ## Setup
