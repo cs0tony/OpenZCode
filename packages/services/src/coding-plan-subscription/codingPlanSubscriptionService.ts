@@ -46,6 +46,9 @@ export function createCodingPlanSubscriptionService(
     // 因此和其它平台级配置一样固定走 bigmodel provider，与 family 无关。
     getDynamicWorkflowClientConfig: (options) =>
       bigmodelProvider.getDynamicWorkflowClientConfig(options),
+    // Coding Plan 活动文案：与 client/configs 同源，固定走 bigmodel provider，与 family 无关。
+    getCodingPlanBillingDiscount: (options) =>
+      bigmodelProvider.getCodingPlanBillingDiscount(options),
     getModelContextBudgetStrategy: () => bigmodelProvider.getModelContextBudgetStrategy(),
     getForceUpdateConfig: () => bigmodelProvider.getForceUpdateConfig(),
     productInfo: (request) => bigmodelProvider.productInfo(request),

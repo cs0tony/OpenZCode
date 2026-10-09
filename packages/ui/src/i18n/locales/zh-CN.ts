@@ -2834,6 +2834,9 @@ const zhCN: Record<string, string> = {
   "settings.modelProvider.startPlan.expiresAt": "过期时间 {date}",
   "settings.modelProvider.codingPlan.openApiKeyProvider": "打开 BigModel - API Key",
   "settings.modelProvider.codingPlan.plansTitle": "编程套餐",
+  // 徽标内容与活动数值来自服务端 codingPlanBillingDiscount 配置；入口无障碍标签与官方 ZCode 客户端保持一致。
+  "settings.modelProvider.codingPlan.billingDiscountInfo.open": "查看 150% 配额活动说明",
+  "settings.modelProvider.codingPlan.billingDiscountInfo.toggle": "显示活动信息",
   "settings.modelProvider.codingPlan.audience.personal": "个人",
   "settings.modelProvider.codingPlan.audience.enterprise": "企业",
   "settings.modelProvider.codingPlan.period.monthly": "包月",

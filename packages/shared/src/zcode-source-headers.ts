@@ -1,7 +1,10 @@
 import { DEFAULT_ZCODE_ENDPOINT_ORIGIN } from "./zcodeEndpoint.js";
 
+// 线上身份字段必须与官方 ZCode 客户端逐字节一致（specs/zcode-wire-identity-headers.md）：
+// 官方后端按这些字段识别 ZCode 来源流量并套用活动配额口径（如 150% 配额活动）。
+// 品牌更名只允许发生在仓库名、界面文案与内部命名，不得进入这些线上请求头值。
 export const ZCODE_SOURCE_HEADERS = {
-  "User-Agent": "OpenZCode/unknown",
+  "User-Agent": "ZCode/unknown",
   "HTTP-Referer": DEFAULT_ZCODE_ENDPOINT_ORIGIN,
   "X-Title": "Z Code@electron",
 } as const;
@@ -45,8 +48,8 @@ export function buildZCodeSourceHeadersFromContext(
   return {
     ...ZCODE_SOURCE_HEADERS,
     "HTTP-Referer": endpointOrigin,
-    "User-Agent": `OpenZCode/${appVersion ?? "unknown"}`,
-    ...(appVersion ? { "X-OpenZCode-App-Version": appVersion } : {}),
+    "User-Agent": `ZCode/${appVersion ?? "unknown"}`,
+    ...(appVersion ? { "X-ZCode-App-Version": appVersion } : {}),
     "X-Title": `Z Code@${sourceTitle}`,
     ...(platform && arch ? { "X-Platform": `${platform}-${arch}` } : {}),
     ...(releaseChannel ? { "X-Release-Channel": releaseChannel } : {}),

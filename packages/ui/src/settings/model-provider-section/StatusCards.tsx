@@ -138,6 +138,7 @@ export function CodingPlanStatusPanel({
   providerName,
   status,
   viewState,
+  titleAccessory,
   loginLoading,
   disconnectLoading,
   purchaseUrl,
@@ -175,6 +176,8 @@ export function CodingPlanStatusPanel({
   providerName: string;
   status: CodingPlanStatus;
   viewState?: CodingPlanStatusPanelViewState;
+  /** 渲染在当前套餐名称右侧的附加元素（如活动徽标）；仅作用于单卡分支。 */
+  titleAccessory?: ReactNode;
   loginLoading?: boolean;
   disconnectLoading?: boolean;
   purchaseUrl?: string;
@@ -604,6 +607,7 @@ export function CodingPlanStatusPanel({
           <PlanStatusCardSurface
             key="current-plan"
             planTitle={planTitle}
+            titleAccessory={titleAccessory}
             statusMeta={statusContent}
             trailingAction={trailingAction}
             usageContent={

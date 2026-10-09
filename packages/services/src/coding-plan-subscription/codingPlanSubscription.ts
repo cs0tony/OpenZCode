@@ -43,6 +43,7 @@ import type {
   ZCodeModelContextBudgetStrategy,
   ForceUpdateConfig,
   DynamicWorkflowClientConfig,
+  CodingPlanBillingDiscountConfig,
 } from "@zcode/shared";
 import type { ModelSelectionView } from "@zcode/provider";
 import { ServiceChannels } from "@zcode/shared";
@@ -69,6 +70,13 @@ export interface ICodingPlanSubscriptionService {
   getDynamicWorkflowClientConfig(options?: {
     forceRefresh?: boolean;
   }): Promise<DynamicWorkflowClientConfig>;
+  /**
+   * Coding Plan 活动文案配置（specs/coding-plan-billing-discount-badge.md）：
+   * 与 client/configs 同源；缺失/非法/请求失败一律返回 null（fail-closed，按无活动处理）。
+   */
+  getCodingPlanBillingDiscount(options?: {
+    forceRefresh?: boolean;
+  }): Promise<CodingPlanBillingDiscountConfig | null>;
   /** 兼容接口：固定返回 preflight-v1，不读取远端配置或缓存。 */
   getModelContextBudgetStrategy(): Promise<ZCodeModelContextBudgetStrategy>;
   getForceUpdateConfig(): Promise<ForceUpdateConfig | null>;

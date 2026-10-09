@@ -27,6 +27,10 @@ import {
 } from "./constants.js";
 import { InlineEditableProviderCard } from "./InlineEditableProviderCard.js";
 import {
+  CodingPlanBillingDiscountBadge,
+  CodingPlanBillingDiscountSection,
+} from "./CodingPlanBillingDiscountSection.js";
+import {
   ModelProviderLoadingCard,
   PresetProviderPlaceholderCard,
   CodingPlanStatusPanel,
@@ -607,6 +611,8 @@ export function ModelProviderSectionDetail({
           providerName={selectedNavItem.providerName}
           status={selectedNavItem.status}
           viewState={statusPanelViewState}
+          // 活动徽标对齐官方 ZCode：渲染在套餐名称右侧；Start Plan 无活动，不渲染。
+          titleAccessory={!isStartPlanProvider ? <CodingPlanBillingDiscountBadge /> : undefined}
           planLevel={selectedNavItem.planLevel}
           subscriptionRenewTime={selectedNavItem.subscriptionRenewTime}
           subscriptionExpireTime={selectedNavItem.subscriptionExpireTime}
@@ -709,6 +715,8 @@ export function ModelProviderSectionDetail({
             nameEditable={false}
             statusSection={
               <div className="space-y-3">
+                {/* 活动信息开关（spec：coding-plan-billing-discount-badge.md），官方套餐卡上方；Start Plan 无活动不渲染。 */}
+                {!isStartPlanProvider && <CodingPlanBillingDiscountSection />}
                 {statusPanel}
                 {planSupplementalContent}
               </div>
@@ -722,11 +730,15 @@ export function ModelProviderSectionDetail({
     return (
       <ProviderFamilyDetailShell header={codingPlanFamilyHeader}>
         <div className="space-y-3">
+          {/* 活动信息开关（spec：coding-plan-billing-discount-badge.md），官方套餐卡上方；Start Plan 无活动不渲染。 */}
+          {!isStartPlanProvider && <CodingPlanBillingDiscountSection />}
           <CodingPlanStatusPanel
             providerId={selectedNavItem.presetId}
             providerName={selectedNavItem.providerName}
             status={selectedNavItem.status}
             viewState={statusPanelViewState}
+            // 活动徽标对齐官方 ZCode：渲染在套餐名称右侧；Start Plan 无活动，不渲染。
+            titleAccessory={!isStartPlanProvider ? <CodingPlanBillingDiscountBadge /> : undefined}
             // 未登录状态下右侧只渲染 Plan Card，不再回退到 API Key 表单。
             // 因此登录入口必须留在 Plan Card 本身，否则用户进入 Coding tab 后没有下一步动作。
             loginActionVisible

@@ -3025,6 +3025,10 @@ const enUS: Record<string, string> = {
   "settings.modelProvider.startPlan.expiresAt": "Expires {date}",
   "settings.modelProvider.codingPlan.openApiKeyProvider": "Open BigModel - API key",
   "settings.modelProvider.codingPlan.plansTitle": "Coding Plan",
+  // Badge copy and campaign numbers come from the server-side codingPlanBillingDiscount config;
+  // the entry aria-label stays identical to the official ZCode client.
+  "settings.modelProvider.codingPlan.billingDiscountInfo.open": "View 150% quota campaign details",
+  "settings.modelProvider.codingPlan.billingDiscountInfo.toggle": "Show campaign info",
   "settings.modelProvider.codingPlan.audience.personal": "Individuals",
   "settings.modelProvider.codingPlan.audience.enterprise": "Enterprise",
   "settings.modelProvider.codingPlan.period.monthly": "Monthly",

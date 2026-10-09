@@ -69,7 +69,9 @@ import {
   resolveDynamicWorkflowClientConfig,
   DEFAULT_DYNAMIC_WORKFLOW_MODE,
   ZCODE_DYNAMIC_WORKFLOW_MODE_ENV,
+  parseCodingPlanBillingDiscount,
 } from "@zcode/shared";
+import type { CodingPlanBillingDiscountConfig } from "@zcode/shared";
 import type { ICredentialService } from "../credential/credential.js";
 import { readApiJson } from "../providers/api/apiJson.js";
 import { createServiceLogger } from "../logger/serviceLogger.js";
@@ -117,6 +119,9 @@ interface ZCodeClientConfigEnvelope {
       dynamicWorkflow?: {
         mode?: unknown;
       } | null;
+      // Coding Plan 活动文案：结构由 shared 的 parseCodingPlanBillingDiscount 裁决，
+      // 这里保持 unknown，不在类型层假设服务端合法。
+      codingPlanBillingDiscount?: unknown;
     } | null;
   } | null;
 }
@@ -265,6 +270,29 @@ export class BigModelCodingPlanSubscriptionProvider {
         errorMessage: error instanceof Error ? error.message : String(error),
       });
       return createDynamicWorkflowClientConfig(DEFAULT_DYNAMIC_WORKFLOW_MODE, "default");
+    }
+  }
+
+  /**
+   * Coding Plan 活动文案：复用 client/configs 通道零新增请求（specs/coding-plan-billing-discount-badge.md）。
+   * forceRefresh 与灰度配置同义：清掉 1h 快照后重拉；请求失败 fail-closed 返回 null，
+   * 不把异常抛给调用方——活动徽标读失败不能阻断套餐状态卡渲染。
+   */
+  async getCodingPlanBillingDiscount(options?: {
+    forceRefresh?: boolean;
+  }): Promise<CodingPlanBillingDiscountConfig | null> {
+    if (options?.forceRefresh) {
+      this.clientConfigSnapshot = null;
+      this.clientConfigSnapshotExpiresAt = 0;
+    }
+    try {
+      const payload = await this.getClientConfigs();
+      return parseCodingPlanBillingDiscount(payload.data?.configs?.codingPlanBillingDiscount);
+    } catch (error) {
+      log.warn(undefined, "Coding Plan 活动配置读取失败，按无活动处理", {
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+      return null;
     }
   }
 
