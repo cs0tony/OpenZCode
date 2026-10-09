@@ -209,6 +209,8 @@ export const TID_PROJECT_SECTION = "project-section";
 export const TID_CONVERSATION_NEW_TASK = "conversation-new-task";
 /** 项目分区添加菜单按钮 */
 export const TID_PROJECT_ADD = "project-add";
+/** 项目分区添加菜单中的"新建项目"入口（项目工作区） */
+export const TID_PROJECT_ADD_NEW = "project-add-new";
 /** Composer workspace 选择触发器 */
 export const TID_COMPOSER_WORKSPACE_TRIGGER = "composer-workspace-trigger";
 /** Composer workspace 菜单的远程连接入口 */

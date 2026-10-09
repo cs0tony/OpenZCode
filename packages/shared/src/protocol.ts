@@ -121,6 +121,28 @@ export interface TabState {
   workspacePath: string;
   /** 显示名称，通常为路径最后一段 */
   label: string;
+  /**
+   * 所属项目工作区（settings.projectWorkspaces 的 id）；普通文件夹 tab 缺省。
+   * 仅 UI/settings 层标识，不进 agent 协议 wire format，也不参与 workspaceKey。
+   */
+  projectWorkspaceId?: string;
+}
+
+/**
+ * 项目工作区：用户命名 + 多个源文件夹 + 唯一主文件夹（primary）。
+ * 规则见 specs/project-workspace-multi-folder.md：
+ * - primaryFolderPath 是唯一执行锚点，就是一个普通的 workspacePath，对协议/运行时零新增概念；
+ * - 元数据只存用户级 settings，不写入任何项目文件夹；
+ * - 切换 primary 只影响新会话，既有会话锚点不动。
+ */
+export interface ProjectWorkspace {
+  id: string;
+  name: string;
+  /** 源文件夹绝对路径；至少 1 个，有序且去重。 */
+  folderPaths: string[];
+  /** 主文件夹（执行锚点），必须是 folderPaths 之一。 */
+  primaryFolderPath: string;
+  createdAt: number;
 }
 
 export interface SSHRemoteTargetSnapshot {
@@ -183,6 +205,8 @@ export interface LocalWorkspaceSessionEntry {
   workspacePath: string;
   /** 项目展示分类；旧数据缺省为 project，conversation 仍使用真实 workspacePath 作为 cwd/key。 */
   workspacePurpose?: WorkspacePurpose;
+  /** 所属项目工作区 id；恢复时回查 settings.projectWorkspaces，查不到降级为普通文件夹 tab。 */
+  projectWorkspaceId?: string;
 }
 
 export interface RemoteWorkspaceSessionEntry extends RemoteWorkspaceSessionSnapshot {
@@ -238,6 +262,8 @@ export interface AppSettings {
   /** 当前 App/Host 不再显示提交前体验套餐推荐；不改变任何入口的模型选择。 */
   startPlanRecommendationDismissed?: boolean;
   recentProjects: string[]; // 最近项目列表，最多保留 10 个
+  /** 项目工作区（多源文件夹，primary 为执行锚点）；规则见 specs/project-workspace-multi-folder.md。 */
+  projectWorkspaces: ProjectWorkspace[];
   locale: Locale; // 界面语言
   /**
    * 用户覆盖的快捷键绑定（命令 ID → 绑定串数组，格式见 shortcutCommands.ts）。

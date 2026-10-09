@@ -105,8 +105,7 @@ async function refreshSettingsStore(settingService: ISettingService | undefined)
 }
 
 /** 获取和更新应用设置 */
-export function useSettings() {
-  const { botsService, broadcastService, settingService, zcodeAgentService } = useServices();
+export function useSettings() {  const { botsService, broadcastService, settingService, zcodeAgentService } = useServices();
   const platform = usePlatform();
   const settingsStore = getSettingsStore(settingService);
   const [snapshot, setSnapshot] = useState<SettingsSnapshot>(settingsStore.snapshot);
@@ -188,6 +187,23 @@ export function useSettings() {
     update,
     refresh,
   };
+}
+
+/**
+ * 在指定 services 实例上写设置并刷新对应快照。
+ * 供跨 workspace 的动作使用：`useSettings().update` 绑定当前 `useServices()` 作用域，
+ * 激活远程 tab 时会解析到没有 settingService 的远端 host，直接调用会漏写甚至崩溃。
+ * 项目定义删除这类"必须落在本机 host"的写入走这里（锚定 base services 实例）。
+ */
+export async function updateAppSettingsVia(
+  settingService: ISettingService | undefined,
+  patch: Partial<AppSettings>,
+): Promise<void> {
+  if (!settingService) {
+    return;
+  }
+  await settingService.update(patch);
+  await refreshSettingsStore(settingService);
 }
 
 /** 最近项目列表的便捷 hook */

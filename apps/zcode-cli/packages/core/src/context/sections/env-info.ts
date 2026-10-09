@@ -8,6 +8,7 @@ import { estimateTokens } from "../utils.js";
 
 const ENVIRONMENT_HEADING = "# Environment";
 const WORKING_DIRECTORY_LABEL = "Primary working directory";
+const ADDITIONAL_SOURCE_FOLDERS_LABEL = "Additional source folders";
 const IS_GIT_REPOSITORY_LABEL = "Is a git repository";
 const PLATFORM_LABEL = "Platform";
 const SHELL_LABEL = "Shell";
@@ -69,6 +70,11 @@ function buildEnvInfoContent(info: EnvInfo, model?: Model): string {
     ENVIRONMENT_HEADING,
     "You have been invoked in the following environment:",
     `- ${WORKING_DIRECTORY_LABEL}: ${info.cwd}`,
+    // 项目工作区（多源文件夹）：仅在 services 注入额外目录时出现；
+    // 普通工作区不渲染该行，输出与旧版本逐字节一致（specs/project-workspace-multi-folder.md）。
+    ...(info.additionalDirectories && info.additionalDirectories.length > 0
+      ? [`- ${ADDITIONAL_SOURCE_FOLDERS_LABEL}: ${info.additionalDirectories.join(", ")}`]
+      : []),
     `- ${IS_GIT_REPOSITORY_LABEL}: ${hasGitRepository ? YES_LABEL : NO_LABEL}`,
     `- ${PLATFORM_LABEL}: ${info.platform}`,
     `- ${SHELL_LABEL}: ${info.shell}`,

@@ -17,6 +17,7 @@ export type {
   ZCodeInteractionBehavior,
   TabId,
   TabState,
+  ProjectWorkspace,
   ResourceUsageCategory,
   ResourceUsageBaseGroupKey,
   ResourceUsageProcess,
@@ -27,6 +28,12 @@ export type {
   PersistedWorkspaceSessionEntry,
 } from "./protocol.js";
 export type { WorkspacePurpose } from "./workspacePurpose.js";
+export {
+  OPEN_ZCODE_ADDITIONAL_DIRECTORIES_ENV,
+  findProjectWorkspaceByPrimary,
+  projectFolderPathKey,
+  resolveProjectSourceFolders,
+} from "./projectWorkspace.js";
 export { DEFAULT_LOCALE } from "./protocol.js";
 export { ZCODE_VERSION, ZCODE_COMMIT, ZCODE_BUILD_TIME } from "./version.js";
 export type { HelloMessage, HelloAckMessage } from "./handshake.js";

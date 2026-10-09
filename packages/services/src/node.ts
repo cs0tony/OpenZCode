@@ -3,7 +3,7 @@
 import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import {
   createNodeProviderRuntimePathEnv,
   NodeModelSelectionConfigRepository,
@@ -14,7 +14,10 @@ import {
   buildLocalMediaPreviewUrl,
   isProviderProvisioningAccountCredentialKey,
   type ProviderProvisioningTrigger,
+  OPEN_ZCODE_ADDITIONAL_DIRECTORIES_ENV,
   OPEN_ZCODE_DATA_DIR_NAME,
+  projectFolderPathKey,
+  resolveProjectSourceFolders,
 } from "@zcode/shared";
 
 export {
@@ -2144,6 +2147,21 @@ export function createLocalServices(options: {
     // 覆盖模型 API / MCP / Bash 出口流量并信任用户显式配置的证书；改动后下次启动 agent 生效。
     resolveSpawnEnv: async (context) => {
       const [settings] = await Promise.all([settingService.get(), providerRuntime.start()]);
+      // 项目工作区（多源文件夹）：spawn 时把 primary 之外的源文件夹交给 CLI，
+      // 供 Environment 段做目录感知（specs/project-workspace-multi-folder.md）。
+      // 普通工作区解析结果为空，不注入该 env，CLI 输出与旧版本逐字节一致。
+      const projectSourceFolders = resolveProjectSourceFolders(
+        settings.projectWorkspaces,
+        context.workspacePath,
+      );
+      const workspacePathKey = projectFolderPathKey(context.workspacePath);
+      const additionalProjectFolders = projectSourceFolders.filter(
+        (folderPath) => projectFolderPathKey(folderPath) !== workspacePathKey,
+      );
+      const projectSourceFoldersEnv: Record<string, string> =
+        additionalProjectFolders.length > 0
+          ? { [OPEN_ZCODE_ADDITIONAL_DIRECTORIES_ENV]: additionalProjectFolders.join(delimiter) }
+          : {};
       // 内置 Subagent 的旧覆盖必须在 CLI 独立读取之前导入，不能等待设置页操作。
       await subagentsService.prepareRuntimeState();
       const agentNetwork =
@@ -2220,6 +2238,7 @@ export function createLocalServices(options: {
       // 先拿到尚不存在的 provider_config.json 并发布短暂空 Registry。
       await providerConfigRuntime.start();
       return {
+        ...projectSourceFoldersEnv,
         ...buildAgentRuntimeEnv({
           httpProxy: agentNetwork.httpProxy,
           noProxy: agentNetwork.noProxy,
@@ -2303,6 +2322,12 @@ export function createLocalServices(options: {
     agentService: zcodeAgentService,
     taskIndexSyncer: zcodeTaskIndexSyncer,
     cuaProductMcpServerResolver,
+    // 项目工作区（多源文件夹）：会话创建/恢复时把 filesystem MCP 的 allowed directories
+    // 扩展到全部源文件夹；普通工作区返回空数组，行为不变（specs/project-workspace-multi-folder.md）。
+    resolveProjectSourceFolders: async (workspacePath) => {
+      const settings = await settingService.get();
+      return resolveProjectSourceFolders(settings.projectWorkspaces, workspacePath);
+    },
   });
   const gitCommitMessageGenerator = new GitCommitMessageGenerator({
     currentModelProvider: {

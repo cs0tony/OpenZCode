@@ -1,6 +1,7 @@
 /* eslint-disable max-lines -- Root workspace action hook 集中编排项目、远程和 conversation 入口；合并期保持动作边界完整，后续按领域拆分。 */
 import { useCallback, useEffect, useState } from "react";
 import {
+  createUuid,
   DesktopCommandIds,
   type AppSettings,
   type IPlatformService,
@@ -16,10 +17,21 @@ import { resolveLogoutProviderFamilyDomain } from "@/lib/providerFamilyDomainSet
 import { isRendererReloadNavigation } from "@/lib/rendererNavigation.js";
 import { parseWslUncWorkspacePath } from "@/lib/wslUncWorkspace.js";
 import { logger } from "@/logger.js";
+import type {
+  ProjectWorkspaceCommitResult,
+  ProjectWorkspaceDraft,
+} from "@/project-workspace/projectWorkspaceDraft.js";
+import { resolveConflictingProjectForCommit } from "@/project-workspace/projectWorkspaceDraft.js";
 import { openFolderFromWorkspaceEntry } from "@/root/openWorkspaceFolderEntry.js";
 import { useConversationWorkspaceActions } from "@/root/useConversationWorkspaceActions.js";
 import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
-import { isWorkspaceReadOnly, type TabStore, type TabStoreState } from "@/store/tabStore.js";
+import {
+  isWorkspaceReadOnly,
+  isWorkspaceTab,
+  type TabStore,
+  type TabStoreState,
+  type WorkspaceTabState,
+} from "@/store/tabStore.js";
 import type { RootProps } from "@/root/types.js";
 import {
   hadPersistedPaneLayoutAtModuleLoad,
@@ -542,6 +554,133 @@ export function useRootWorkspaceActions({
     [allowOpenWorkspace, handleSelectProject, services.fileService],
   );
 
+  /**
+   * 项目工作区提交（创建或编辑，specs/project-workspace-multi-folder.md）。
+   * 唯一持久化所有者是 settings.projectWorkspaces；tab 只持 projectWorkspaceId 投影。
+   * 写入必须走 updateAppSettings（= settingService.update + sync + refresh）：
+   * 之前直写 settingService 不会刷新 UI settings 快照，编辑弹窗回查 projectWorkspaces
+   * 时拿到的是旧数组，弹窗被当成"新建"渲染成空白。
+   * 切换 primary 只重锚 tab 与新会话，既有会话不迁移。
+   */
+  const handleCommitProjectWorkspace = useCallback(
+    async (draft: ProjectWorkspaceDraft): Promise<ProjectWorkspaceCommitResult> => {
+      if (!supportsSettings) {
+        // 远程窗口 host 不提供 settingService，项目定义无法持久化，直接拒绝提交。
+        logger.warn("[Root] 当前模式不支持项目工作区，已忽略提交");
+        return { ok: false, outcome: "duplicatePrimary" };
+      }
+      const settings = await services.settingService.get();
+      // 同 primary 冲突裁决：项目定义比 tab 活得久（侧边栏移除 tab 不删定义，spec 边界），
+      // 没有任何打开 tab 的项目定义是不可见孤儿，却仍占用 primary。孤儿让位移除，
+      // 只有真实打开着的冲突项目才拒绝提交（specs/project-workspace-multi-folder.md 边界）。
+      const openProjectTabIds = new Set(
+        tabStoreApi
+          .getState()
+          .tabs.filter(isWorkspaceTab)
+          .map((tab) => tab.projectWorkspaceId)
+          .filter((projectId): projectId is string => Boolean(projectId)),
+      );
+      const conflict = resolveConflictingProjectForCommit({
+        projectWorkspaces: settings.projectWorkspaces,
+        draftId: draft.id,
+        primaryFolderPath: draft.primaryFolderPath,
+        openProjectTabIds,
+      });
+      if (conflict.blocked) {
+        return { ok: false, outcome: "duplicatePrimary" };
+      }
+
+      const baseProjectWorkspaces = conflict.orphanId
+        ? settings.projectWorkspaces.filter((project) => project.id !== conflict.orphanId)
+        : settings.projectWorkspaces;
+      const projectWorkspaces = draft.id
+        ? baseProjectWorkspaces.map((project) =>
+            project.id === draft.id
+              ? {
+                  ...project,
+                  name: draft.name,
+                  folderPaths: [...draft.folderPaths],
+                  primaryFolderPath: draft.primaryFolderPath,
+                }
+              : project,
+          )
+        : [
+            {
+              id: createUuid(),
+              name: draft.name,
+              folderPaths: [...draft.folderPaths],
+              primaryFolderPath: draft.primaryFolderPath,
+              createdAt: Date.now(),
+            },
+            ...baseProjectWorkspaces,
+          ];
+      const projectId = draft.id ?? projectWorkspaces[0]?.id;
+      if (!projectId) {
+        logger.error("[Root] 项目工作区提交失败：无法解析 projectId");
+        return { ok: false, outcome: "duplicatePrimary" };
+      }
+
+      let outcome: ProjectWorkspaceCommitResult["outcome"] = draft.id
+        ? "updated"
+        : "created";
+      const existingProjectTab = tabStoreApi
+        .getState()
+        .tabs.find(
+          (tab): tab is WorkspaceTabState =>
+            isWorkspaceTab(tab) && tab.projectWorkspaceId === projectId,
+        );
+      if (existingProjectTab) {
+        // 编辑/切换 primary：重锚已打开的项目 tab（label 与执行锚点），不重置会话。
+        tabStoreApi
+          .getState()
+          .reanchorProjectWorkspaceTabs(projectId, draft.primaryFolderPath, draft.name);
+      } else {
+        // tab 身份按路径匹配：primary 上已打开的普通"打开文件夹" tab 会被并入项目 tab，
+        // 无法真正共存（specs 边界）。这里识别该情况，交由 UI 提示。
+        const absorbedPlainTab = tabStoreApi
+          .getState()
+          .tabs.find(
+            (tab): tab is WorkspaceTabState =>
+              isWorkspaceTab(tab) &&
+              !tab.projectWorkspaceId &&
+              !tab.workspaceIdentity &&
+              tab.workspacePath === draft.primaryFolderPath,
+          );
+        // 与 handleSelectProject 一致：primary 已在其他窗口打开时只激活那边。
+        const result = await platform.activateOrSetWorkspace(draft.primaryFolderPath);
+        if (!result.activated) {
+          addTab(draft.primaryFolderPath, {
+            projectWorkspaceId: projectId,
+            label: draft.name,
+          });
+          startDraftInWorkspace(draft.primaryFolderPath);
+        }
+        if (absorbedPlainTab) {
+          outcome = "absorbedPlainFolder";
+        }
+      }
+
+      // recentProjects 仍按纯路径维护（消费方不感知项目概念），追加 primary；
+      // 与 projectWorkspaces 合并为一次 patch，refresh 只跑一轮。
+      const updatedRecent = [
+        draft.primaryFolderPath,
+        ...settings.recentProjects.filter(
+          (projectPath) => projectPath !== draft.primaryFolderPath,
+        ),
+      ].slice(0, 10);
+      await updateAppSettings({ projectWorkspaces, recentProjects: updatedRecent });
+      return { ok: true, outcome };
+    },
+    [
+      addTab,
+      platform,
+      startDraftInWorkspace,
+      supportsSettings,
+      tabStoreApi,
+      updateAppSettings,
+    ],
+  );
+
   const handleCreateTask = useCallback(
     (request?: CreateTaskRequest) => {
       startNewTaskFromActiveWorkspace("sidebar new task", request);
@@ -578,6 +717,7 @@ export function useRootWorkspaceActions({
     handleOpenWorkspace,
     handleOpenFolderFromWorkspaceMenu,
     handleCreateScratchWorkspace,
+    handleCommitProjectWorkspace,
     handleCreateTask,
     handleBackFromSettings,
   };

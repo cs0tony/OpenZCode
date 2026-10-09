@@ -20,6 +20,7 @@ import {
   InfoIcon,
   ListTree,
   LoaderCircle,
+  PenLine,
   RefreshCwIcon,
   MessageCirclePlus,
   XIcon,
@@ -28,6 +29,8 @@ import type { useSortable } from "@dnd-kit/sortable";
 import { BorderBeam } from "border-beam";
 import { STATUS_DOT } from "@/components/workflow-graph/run-status-presentation.js";
 import { Button, buttonVariants } from "@/components/ui/button.js";
+import { useDeleteProjectWorkspace } from "@/project-workspace/useDeleteProjectWorkspace.js";
+import { openEditProjectWorkspaceDialog } from "@/store/projectWorkspaceDialogStore.js";
 import {
   Collapsible,
   CollapsibleContent,
@@ -187,6 +190,7 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
   isDragging?: boolean;
 }) {
   const { intl } = useZCodeIntl();
+  const deleteProjectWorkspace = useDeleteProjectWorkspace();
   const workspaceZCodeState = useZCodeSessionStore((state) =>
     selectWorkspaceZCodeState(state, tab.workspacePath, tab.workspaceIdentity),
   );
@@ -374,6 +378,17 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
       }
     }
 
+    // 项目工作区：移除 tab 即删除项目定义——项目的唯一可见形态就是 tab，
+    // 只关 tab 会让定义变成不可见孤儿并一直占用 primary（specs/project-workspace-multi-folder.md
+    // 边界："移除 = 删除"）。先删定义再关 tab；删除失败不阻塞移除，孤儿由创建时的冲突裁决兜底回收。
+    if (tab.projectWorkspaceId) {
+      try {
+        await deleteProjectWorkspace(tab.projectWorkspaceId);
+      } catch (error) {
+        logger.error("[WorkspaceSidebarItem] 移除项目 tab 时删除项目定义失败", error);
+      }
+    }
+
     closeTab(tab.id);
     releaseWorkspaceRuntimeAfterProjectRemoval({
       tab: {
@@ -418,6 +433,7 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
     baseServices.fileService,
     closeTab,
     confirmDialog,
+    deleteProjectWorkspace,
     intl,
     isExpanded,
     isRemoteWorkspace,
@@ -930,6 +946,17 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
                             onOpenMcpSync={() => setRemoteMcpSyncOpen(true)}
                             onOpenPluginSync={() => setRemotePluginSyncOpen(true)}
                           />
+                          {tab.projectWorkspaceId ? (
+                            <DropdownMenuItem
+                              onSelect={() => {
+                                // 项目工作区编辑入口：名称/源文件夹/primary 切换都在弹窗内完成。
+                                openEditProjectWorkspaceDialog(tab.projectWorkspaceId!);
+                              }}
+                            >
+                              <PenLine className="h-3.5 w-3.5" />
+                              {intl.formatMessage({ id: "projectWorkspace.menu.edit" })}
+                            </DropdownMenuItem>
+                          ) : null}
                           <DropdownMenuItem
                             data-testid={testId(TID_WORKSPACE_CLOSE, tab.workspacePath)}
                             onMouseDown={(event) => {

@@ -18,6 +18,12 @@ export interface EnvInfo {
   gitStatus?: "clean" | "dirty" | "not_repo";
   gitStatusLines?: string[];
   recentCommits?: string[];
+  /**
+   * 项目工作区（多源文件夹）中 primary 之外的源文件夹；由 services 在 spawn 时经
+   * OPEN_ZCODE_ADDITIONAL_DIRECTORIES 注入。缺省即普通单根工作区，
+   * Environment 段输出保持逐字节一致（specs/project-workspace-multi-folder.md）。
+   */
+  additionalDirectories?: string[];
 }
 
 export interface UserInstructionsOptions {

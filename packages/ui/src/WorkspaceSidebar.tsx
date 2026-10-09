@@ -19,6 +19,7 @@ import {
   Cloud,
   Folder,
   FolderOpen,
+  FolderPlus,
   Hash,
   ListFilter,
   Maximize2,
@@ -47,7 +48,12 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import type { Locale, RemoteTarget, UserInfo, ZCodeTaskMeta } from "@zcode/shared";
-import { BUILTIN_MODEL_PROVIDER_IDS } from "@zcode/shared";
+import {
+  BUILTIN_MODEL_PROVIDER_IDS,
+  projectFolderPathKey,
+  resolveProjectSourceFolders,
+  TID_PROJECT_ADD_NEW,
+} from "@zcode/shared";
 import {
   TID_CONVERSATION_NEW_TASK,
   TID_CONVERSATION_SECTION,
@@ -71,7 +77,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { getPathLeaf } from "@/lib/path.js";
 import { logger } from "@/logger.js";
+import { useSettings } from "@/hooks/useSettingService.js";
+import { openCreateProjectWorkspaceDialog } from "@/store/projectWorkspaceDialogStore.js";
 import { NewTaskButtonGroup } from "@/NewTaskButtonGroup.js";
 import { selectWorkspaceZCodeState, useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
 import { useZCodeStore } from "@/store/StoreProvider.js";
@@ -204,6 +213,14 @@ export interface SidebarFileTreeOpenRequest {
   target: SidebarFileTreeTarget;
 }
 
+/** 项目工作区（多源文件夹）在文件树面板里的非 primary 源文件夹根。 */
+interface SidebarFileTreeProjectRoot {
+  path: string;
+  label: string;
+}
+
+const EMPTY_FILE_TREE_PROJECT_ROOTS: SidebarFileTreeProjectRoot[] = [];
+
 function resolveSidebarTaskViewMode(params: {
   showArchivedTasks: boolean;
   taskOrganizeBy: TaskOrganizeBy;
@@ -316,6 +333,8 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
   onFileTreeOpenChange?: (open: boolean) => void;
 }) {
   const { intl, localePreference, setLocalePreference } = useZCodeIntl();
+  // 项目工作区（多源文件夹）：文件树面板需要 settings.projectWorkspaces 解析额外源文件夹。
+  const { settings: sidebarAppSettings } = useSettings();
   const handleTaskRowSelect = useCallback(
     (
       targetWorkspacePath: string,
@@ -389,6 +408,35 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
   );
   const [isFileTreeOpen, setIsFileTreeOpen] = useState(false);
   const [fileTreeTarget, setFileTreeTarget] = useState<SidebarFileTreeTarget | null>(null);
+  // 项目工作区（多源文件夹）：面板内根切换器当前选中的非 primary 源文件夹；
+  // null 表示停在 primary。WorkspaceFileTree 是单根虚拟化组件，按根重挂载而不是堆叠多实例。
+  const [activeFileTreeRootPath, setActiveFileTreeRootPath] = useState<string | null>(null);
+  const fileTreeProjectRoots = useMemo<SidebarFileTreeProjectRoot[]>(() => {
+    if (
+      !fileTreeTarget ||
+      fileTreeTarget.workspaceIdentity ||
+      fileTreeTarget.workspaceRemoteSessionId
+    ) {
+      // 远程（SSH/WSL/Docker）文件夹一期不进项目工作区。
+      return EMPTY_FILE_TREE_PROJECT_ROOTS;
+    }
+    const primaryKey = projectFolderPathKey(fileTreeTarget.workspacePath);
+    return resolveProjectSourceFolders(
+      sidebarAppSettings?.projectWorkspaces,
+      fileTreeTarget.workspacePath,
+    )
+      .filter((folderPath) => projectFolderPathKey(folderPath) !== primaryKey)
+      .map((folderPath) => ({ path: folderPath, label: getPathLeaf(folderPath) }));
+  }, [fileTreeTarget, sidebarAppSettings?.projectWorkspaces]);
+  useEffect(() => {
+    setActiveFileTreeRootPath(null);
+  }, [fileTreeTarget?.workspacePath]);
+  const activeFileTreeRoot = fileTreeTarget
+    ? (fileTreeProjectRoots.find((root) => root.path === activeFileTreeRootPath) ?? {
+        path: fileTreeTarget.workspacePath,
+        label: fileTreeTarget.workspaceName,
+      })
+    : null;
   const [groupedStickyHeader, setGroupedStickyHeader] = useState<ReactNode | null>(null);
   const [taskOrganizeBy, setTaskOrganizeBy] = useState<TaskOrganizeBy>(
     () => readSidebarTaskPreferences().organizeBy,
@@ -1469,6 +1517,17 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
                                     </DropdownMenuTrigger>
                                   </ControlHintTooltip>
                                   <DropdownMenuContent align="end" className="min-w-44">
+                                    <DropdownMenuItem
+                                      data-testid={TID_PROJECT_ADD_NEW}
+                                      onSelect={() => {
+                                        openCreateProjectWorkspaceDialog();
+                                      }}
+                                    >
+                                      <FolderPlus className="size-4" />
+                                      {intl.formatMessage({
+                                        id: "projectWorkspace.create",
+                                      })}
+                                    </DropdownMenuItem>
                                     <DropdownMenuItem onSelect={onOpenFolderFromWorkspaceMenu}>
                                       <FolderOpen className="size-4" />
                                       {intl.formatMessage({
@@ -1668,30 +1727,76 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
           )}
           aria-hidden={!isFileTreeOpen}
         >
-          {fileTreeTarget ? (
-            <WorkspaceFileTree
-              workspacePath={fileTreeTarget.workspacePath}
-              workspaceName={fileTreeTarget.workspaceName}
-              workspaceIdentity={fileTreeTarget.workspaceIdentity}
-              workspaceRemoteSessionId={fileTreeTarget.workspaceRemoteSessionId}
-              revealPath={fileTreeTarget.revealPath}
-              temporaryExternalDirectory={fileTreeTarget.temporaryExternalDirectory}
-              canOpenLocalFileManager={isDesktop}
-              activePreviewPath={activePreviewPath}
-              onClose={() => setIsFileTreeOpen(false)}
-              onOpenBrowserUrl={isDesktop ? onOpenBrowserUrl : undefined}
-              onOpenPreview={(source) => {
-                // 文件树可以查看非当前 workspace 的文件。
-                // 预览 source 携带 workspace 作用域，PreviewPane 才能用正确 host 读取远程文件；
-                // 同时不切换当前 workspace，避免"Add to chat"丢给错误的 composer。
-                onOpenCodeViewer?.({
-                  ...source,
-                  workspacePath: fileTreeTarget.workspacePath,
-                  workspaceIdentity: fileTreeTarget.workspaceIdentity,
-                  workspaceRemoteSessionId: fileTreeTarget.workspaceRemoteSessionId,
-                });
-              }}
-            />
+          {fileTreeTarget && activeFileTreeRoot ? (
+            <div className="flex h-full min-h-0 flex-col">
+              {fileTreeProjectRoots.length > 0 ? (
+                <div className="flex flex-wrap items-center gap-1 border-b border-border px-3 py-2">
+                  {[
+                    {
+                      path: fileTreeTarget.workspacePath,
+                      label: fileTreeTarget.workspaceName,
+                      isPrimary: true,
+                    },
+                    ...fileTreeProjectRoots.map((root) => ({ ...root, isPrimary: false })),
+                  ].map((root) => {
+                    const isActive = activeFileTreeRoot.path === root.path;
+                    return (
+                      <button
+                        key={root.path}
+                        type="button"
+                        onClick={() =>
+                          setActiveFileTreeRootPath(root.isPrimary ? null : root.path)
+                        }
+                        className={cn(
+                          "flex h-7 min-w-0 items-center gap-1 rounded-md px-2 text-ui-xs",
+                          isActive
+                            ? "bg-selected text-foreground"
+                            : "text-foreground-subtle hover:bg-hover hover:text-foreground",
+                        )}
+                      >
+                        <span className="min-w-0 truncate">{root.label}</span>
+                        {root.isPrimary ? (
+                          <span className="shrink-0 rounded-sm bg-accent px-1 text-accent-foreground">
+                            {intl.formatMessage({ id: "workspaceFileTree.primaryRoot" })}
+                          </span>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+              <div className="min-h-0 flex-1">
+                <WorkspaceFileTree
+                  key={activeFileTreeRoot.path}
+                  workspacePath={activeFileTreeRoot.path}
+                  workspaceName={activeFileTreeRoot.label}
+                  workspaceIdentity={fileTreeTarget.workspaceIdentity}
+                  workspaceRemoteSessionId={fileTreeTarget.workspaceRemoteSessionId}
+                  revealPath={
+                    activeFileTreeRoot.path === fileTreeTarget.workspacePath
+                      ? fileTreeTarget.revealPath
+                      : undefined
+                  }
+                  temporaryExternalDirectory={fileTreeTarget.temporaryExternalDirectory}
+                  canOpenLocalFileManager={isDesktop}
+                  activePreviewPath={activePreviewPath}
+                  onClose={() => setIsFileTreeOpen(false)}
+                  onOpenBrowserUrl={isDesktop ? onOpenBrowserUrl : undefined}
+                  onOpenPreview={(source) => {
+                    // 文件树可以查看非当前 workspace 的文件。
+                    // 预览 source 携带 workspace 作用域，PreviewPane 才能用正确 host 读取远程文件；
+                    // 同时不切换当前 workspace，避免"Add to chat"丢给错误的 composer。
+                    // 项目工作区根切换后必须带当前浏览根的路径，避免预览按 primary 作用域读取。
+                    onOpenCodeViewer?.({
+                      ...source,
+                      workspacePath: activeFileTreeRoot.path,
+                      workspaceIdentity: fileTreeTarget.workspaceIdentity,
+                      workspaceRemoteSessionId: fileTreeTarget.workspaceRemoteSessionId,
+                    });
+                  }}
+                />
+              </div>
+            </div>
           ) : null}
         </div>
       </div>

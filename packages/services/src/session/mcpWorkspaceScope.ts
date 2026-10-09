@@ -17,28 +17,44 @@ function isFilesystemServer(
   );
 }
 
-export function appendWorkspaceToFilesystemMcpServers(
+export function appendWorkspaceFoldersToFilesystemMcpServers(
   mcpServers: ZCodeAgentMcpServer[] | undefined,
-  workspacePath: string,
+  primaryWorkspacePath: string,
+  additionalFolderPaths: readonly string[] = [],
 ): ZCodeAgentMcpServer[] | undefined {
   if (!mcpServers || mcpServers.length === 0) {
     return mcpServers;
   }
 
-  const trimmedWorkspacePath = workspacePath.trim();
-  if (!trimmedWorkspacePath || !existsSync(trimmedWorkspacePath)) {
+  // primary 在前，additional 按传入顺序；按归一化键去重，只注入本机存在的路径，
+  // 避免远程 workspace 或已删除目录被误注入本机 MCP。
+  const seen = new Set<string>();
+  const folderPaths: string[] = [];
+  for (const candidate of [primaryWorkspacePath, ...additionalFolderPaths]) {
+    const trimmed = candidate.trim();
+    if (!trimmed || !existsSync(trimmed)) {
+      continue;
+    }
+    const key = normalizePathForCompare(trimmed);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    folderPaths.push(trimmed);
+  }
+  if (folderPaths.length === 0) {
     return mcpServers;
   }
 
   let changed = false;
-  const workspaceKey = normalizePathForCompare(trimmedWorkspacePath);
   const nextServers = mcpServers.map((server) => {
     if (!isFilesystemServer(server)) {
       return server;
     }
 
-    const hasWorkspace = server.args.some((arg) => normalizePathForCompare(arg) === workspaceKey);
-    if (hasWorkspace) {
+    const existingKeys = new Set(server.args.map(normalizePathForCompare));
+    const missing = folderPaths.filter((path) => !existingKeys.has(normalizePathForCompare(path)));
+    if (missing.length === 0) {
       return server;
     }
 
@@ -47,11 +63,20 @@ export function appendWorkspaceToFilesystemMcpServers(
     // 不会自动允许当前 workspace，导致 agent 写当前项目文件时报
     // "Access denied - path outside allowed directories"。这里仅在本机路径存在时
     // 非持久化追加当前 workspace，避免远程 workspace 被误注入本机 MCP。
+    // 项目工作区（多源文件夹）在此追加全部源文件夹，即"统一权限"的正式落点
+    // （specs/project-workspace-multi-folder.md）。
     return {
       ...server,
-      args: [...server.args, trimmedWorkspacePath],
+      args: [...server.args, ...missing],
     };
   });
 
   return changed ? nextServers : mcpServers;
+}
+
+export function appendWorkspaceToFilesystemMcpServers(
+  mcpServers: ZCodeAgentMcpServer[] | undefined,
+  workspacePath: string,
+): ZCodeAgentMcpServer[] | undefined {
+  return appendWorkspaceFoldersToFilesystemMcpServers(mcpServers, workspacePath);
 }

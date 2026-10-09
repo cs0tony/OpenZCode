@@ -4,8 +4,8 @@
 
 import { readFile, stat } from "node:fs/promises";
 import { arch, homedir, release } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
-import { OPEN_ZCODE_DATA_DIR_NAME } from "@zcode/shared";
+import { basename, delimiter, dirname, join, resolve } from "node:path";
+import { OPEN_ZCODE_ADDITIONAL_DIRECTORIES_ENV, OPEN_ZCODE_DATA_DIR_NAME } from "@zcode/shared";
 import { formatLocalIsoDate } from "@zcode/contracts";
 import type {
   ContextSourceDiagnostic,
@@ -24,6 +24,25 @@ import { resolveGitSnapshot } from "./git-snapshot.js";
 
 const DEFAULT_PRIORITY_FILES = ["AGENTS.md"];
 const DEFAULT_MAX_BYTES = 100 * 1024;
+
+/**
+ * 项目工作区（多源文件夹）：services 在 spawn 时经 OPEN_ZCODE_ADDITIONAL_DIRECTORIES 注入
+ * primary 之外的源文件夹（path.delimiter 分隔）。缺省/为空时返回空对象，
+ * EnvInfo 与普通单根工作区保持逐字节一致（specs/project-workspace-multi-folder.md）。
+ */
+function resolveAdditionalProjectDirectories(
+  env: NodeJS.ProcessEnv,
+): Pick<EnvInfo, "additionalDirectories"> {
+  const raw = env[OPEN_ZCODE_ADDITIONAL_DIRECTORIES_ENV];
+  if (!raw) {
+    return {};
+  }
+  const additionalDirectories = raw
+    .split(delimiter)
+    .map((directory) => directory.trim())
+    .filter((directory) => directory.length > 0);
+  return additionalDirectories.length > 0 ? { additionalDirectories } : {};
+}
 
 export interface NodeContextSourceAdapterOptions {
   env?: NodeJS.ProcessEnv;
@@ -82,6 +101,7 @@ export class NodeContextSourceAdapter implements ContextSourcePort {
       osVersion: `${process.platform} ${release()} ${arch()}`,
       nodeVersion: process.version,
       ...gitSnapshot,
+      ...resolveAdditionalProjectDirectories(this.env),
     };
   }
 }

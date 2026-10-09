@@ -355,6 +355,28 @@ nodes:
     codeSeeds:
       - file: apps/zcode-cli/packages/core/src/runtime/methods/turn-model.ts
         symbol: applySubmissionExecutionState
+  - id: entity.project-workspace
+    kind: capability
+    label: Multi-folder project workspace anchored at a primary folder
+    aliases:
+      - project workspace
+      - multi-folder project
+      - source folders
+      - primary folder
+      - 项目工作区
+      - 源文件夹
+    codeSeeds:
+      - file: packages/shared/src/validationAppSettings.ts
+        symbol: projectWorkspaceSchema
+      - file: packages/ui/src/store/tabStore.ts
+        symbol: createWorkspaceTab
+      - file: packages/services/src/session/mcpWorkspaceScope.ts
+        symbol: appendWorkspaceFoldersToFilesystemMcpServers
+    invariants:
+      - primaryFolderPath is a plain workspacePath execution anchor; project metadata stays in
+        user-level settings and never inside project folders.
+      - Switching primary re-anchors new sessions only; existing sessions and workspaceKey are
+        unaffected.
 edges:
   - from: capability.model-selection
     to: surface.conversation-model-control
@@ -598,3 +620,10 @@ edges:
     type: emits-model-selection-for
     rank: must-inspect
     condition: Applied runtime model selection is projected through ModelSelected events.
+  - from: entity.project-workspace
+    to: boundary.workspace-key
+    type: anchors-through
+    rank: must-inspect
+    condition:
+      Project sessions anchor at primaryFolderPath as a plain workspacePath; projectWorkspaceId
+      stays a UI/settings identifier and never enters the wire format or workspaceKey.

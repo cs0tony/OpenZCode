@@ -14,6 +14,8 @@ import { ServiceProvider } from "@/hooks/useServices.js";
 import { useDynamicWorkflowAvailabilityLoader } from "@/hooks/useDynamicWorkflowAvailability.js";
 import { useCodingPlanBillingDiscountLoader } from "@/hooks/useCodingPlanBillingDiscount.js";
 import { DirectoryBrowser } from "@/DirectoryBrowser.js";
+import { ProjectWorkspaceDialog } from "@/ProjectWorkspaceDialog.js";
+import { useDeleteProjectWorkspace } from "@/project-workspace/useDeleteProjectWorkspace.js";
 import { useTabPersistence } from "@/hooks/useTabPersistence.js";
 import { useTokenRefresh } from "@/hooks/useTokenRefresh.js";
 import { useWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
@@ -37,6 +39,9 @@ import {
 import { StoreProvider, useZCodeStore } from "@/store/StoreProvider.js";
 import { setMcpStorePlatform } from "@/store/mcpStore.js";
 import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
+import {
+  useProjectWorkspaceDialogStore,
+} from "@/store/projectWorkspaceDialogStore.js";
 import { TabStoreProvider, useTabStore, useTabStoreApi } from "@/store/TabStoreProvider.js";
 import { isSettingsTab, isWorkspaceTab, type WorkspaceTabState } from "@/store/tabStore.js";
 import { logger } from "@/logger.js";
@@ -187,6 +192,7 @@ function RootInner({
   // 放在 app 级 ServiceProvider 这一层取一次，自动化页与 run 面板只读。消费方可能位于
   // 工作区级 ServiceProvider 内（远程 Host 的 accessor），由它们取数会拿到另一台 Host 的答案。
   useDynamicWorkflowAvailabilityLoader(services.codingPlanSubscriptionService);
+  // Coding Plan 活动文案：与灰度快照同级的 app 会话级唯一取数点。
   useCodingPlanBillingDiscountLoader(services.codingPlanSubscriptionService);
 
   const { intl, locale } = useZCodeIntl();
@@ -234,6 +240,9 @@ function RootInner({
   const [remoteConnectionOpenPreference, setRemoteConnectionOpenPreference] =
     useState<RemoteConnectionOpenPreference | null>(null);
   const [directoryBrowserOpen, setDirectoryBrowserOpen] = useState(false);
+  // 项目工作区弹窗经 DirectoryBrowser 选文件夹时，用该 ref 拦截选择结果：
+  // 命中则把路径交还弹窗 draft，不走进 handleSelectProject 的打开工作区流程。
+  const projectDialogFolderPickerResolveRef = useRef<((path: string | null) => void) | null>(null);
   const [remoteConnectionInProgress, setRemoteConnectionInProgress] = useState(false);
   const [remoteConnectionRequestId, setRemoteConnectionRequestId] = useState<string | null>(null);
   const [isCreatingFallbackWorkspace, setIsCreatingFallbackWorkspace] = useState(false);
@@ -500,6 +509,7 @@ function RootInner({
     handleOpenWorkspace,
     handleOpenFolderFromWorkspaceMenu,
     handleCreateScratchWorkspace,
+    handleCommitProjectWorkspace,
     handleCreateTask,
     handleBackFromSettings,
   } = useRootWorkspaceActions({
@@ -934,14 +944,65 @@ function RootInner({
     >
       <DirectoryBrowser
         services={services}
-        onCancel={() => setDirectoryBrowserOpen(false)}
+        onCancel={() => {
+          // 项目工作区弹窗借道 DirectoryBrowser 选文件夹：取消时必须归还 null，
+          // 否则弹窗的 Promise 永远挂起。
+          const resolveProjectDialogFolder = projectDialogFolderPickerResolveRef.current;
+          projectDialogFolderPickerResolveRef.current = null;
+          resolveProjectDialogFolder?.(null);
+          setDirectoryBrowserOpen(false);
+        }}
         onSelect={(path) => {
           setDirectoryBrowserOpen(false);
+          const resolveProjectDialogFolder = projectDialogFolderPickerResolveRef.current;
+          if (resolveProjectDialogFolder) {
+            projectDialogFolderPickerResolveRef.current = null;
+            resolveProjectDialogFolder(path);
+            return;
+          }
           void handleSelectProject(path);
         }}
       />
     </ScopedErrorBoundary>
   ) : null;
+
+  const projectWorkspaceDialogRequest = useProjectWorkspaceDialogStore((state) => state.request);
+  const closeProjectWorkspaceDialog = useProjectWorkspaceDialogStore((state) => state.close);
+  const deleteProjectWorkspace = useDeleteProjectWorkspace();
+  const selectFolderForProjectDialog = useCallback(async () => {
+    if (shouldPreferDirectoryBrowser) {
+      // Web/远程壳层没有系统目录选择器，走 DirectoryBrowser 借道路径。
+      return new Promise<string | null>((resolve) => {
+        projectDialogFolderPickerResolveRef.current = resolve;
+        setDirectoryBrowserOpen(true);
+      });
+    }
+    return platform.selectDirectory();
+  }, [platform, shouldPreferDirectoryBrowser]);
+  const projectWorkspaceDialogNode =
+    projectWorkspaceDialogRequest && supportsSettings ? (
+      <ProjectWorkspaceDialog
+        // 按请求重挂载：弹窗用 useState 初始化器回填草稿，key 变化才能保证
+        // create→edit→create 每次打开都从当前项目重建，而不是复用上一次的内部状态。
+        key={
+          projectWorkspaceDialogRequest.mode === "edit"
+            ? `edit:${projectWorkspaceDialogRequest.projectId}`
+            : "create"
+        }
+        mode={projectWorkspaceDialogRequest.mode}
+        project={
+          projectWorkspaceDialogRequest.mode === "edit"
+            ? (appSettings?.projectWorkspaces.find(
+                (project) => project.id === projectWorkspaceDialogRequest.projectId,
+              ) ?? null)
+            : null
+        }
+        selectFolder={selectFolderForProjectDialog}
+        onCommit={handleCommitProjectWorkspace}
+        onDelete={deleteProjectWorkspace}
+        onClose={closeProjectWorkspaceDialog}
+      />
+    ) : null;
 
   useEffect(() => {
     const wasInProgress = previousRemoteConnectionInProgressRef.current;
@@ -1013,6 +1074,7 @@ function RootInner({
       {rootModelSelectionErrorNode}
       {remoteConnectionDialog}
       {directoryBrowserDialog}
+      {projectWorkspaceDialogNode}
       <OccupationOnboarding
         showWindowControls={Boolean(isWindowsDesktop || (isDesktop && !isMacDesktop))}
         showChildrenWhileLoading={!workspaceShellPath && isSettingsTabActive}

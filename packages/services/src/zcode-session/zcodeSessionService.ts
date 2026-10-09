@@ -24,7 +24,7 @@ import type {
 } from "#src/zcode-session/zcodeSession.js";
 import { formatModelPickerValue } from "#src/zcode-agent/zcodeConfigOptions.js";
 import { createZCodeSessionApiRetryRuntimeTracker } from "#src/zcode-session/zcodeSessionApiRetry.js";
-import { appendWorkspaceToFilesystemMcpServers } from "#src/session/mcpWorkspaceScope.js";
+import { appendWorkspaceFoldersToFilesystemMcpServers } from "#src/session/mcpWorkspaceScope.js";
 import { repairEmptyImportedClaudeSessionSnapshot } from "#src/zcode-session/importedClaudeSessionRepair.js";
 import { createZCodeDeferredDraftRegistry } from "#src/zcode-session/zcodeSessionDraftRegistry.js";
 import type { CuaProductMcpServerResolver } from "#src/cua-permission-broker/index.js";
@@ -42,12 +42,19 @@ interface CreateZCodeSessionServiceOptions {
    */
   taskIndexSyncer?: ZCodeTaskIndexSyncer;
   cuaProductMcpServerResolver?: CuaProductMcpServerResolver;
+  /**
+   * 解析以 workspacePath 为主文件夹（primary）的项目工作区源文件夹。
+   * 注入后，项目会话的 filesystem MCP allowed directories 覆盖全部源文件夹
+   * （specs/project-workspace-multi-folder.md）；普通工作区应返回空数组。
+   */
+  resolveProjectSourceFolders?: (workspacePath: string) => Promise<string[]>;
 }
 
 export function createZCodeSessionService({
   agentService,
   taskIndexSyncer,
   cuaProductMcpServerResolver,
+  resolveProjectSourceFolders: projectSourceFolderResolver,
 }: CreateZCodeSessionServiceOptions): IZCodeSessionService {
   const { withApiRetryRuntime } = createZCodeSessionApiRetryRuntimeTracker();
   const deferredDraftSessions = createZCodeDeferredDraftRegistry();
@@ -175,9 +182,16 @@ export function createZCodeSessionService({
   async function withResolvedMcpServers<
     T extends ZCodeSessionCreateParams | ZCodeSessionResumeParams,
   >(params: T): Promise<T> {
-    const mcpServers = appendWorkspaceToFilesystemMcpServers(
+    // 项目工作区（多源文件夹）：filesystem MCP 的 allowed directories 覆盖全部源文件夹，
+    // 即"统一权限"的正式落点；普通工作区解析结果为空，注入行为与原单路径完全一致
+    // （specs/project-workspace-multi-folder.md）。
+    const projectSourceFolders = projectSourceFolderResolver
+      ? await projectSourceFolderResolver(params.workspacePath)
+      : [];
+    const mcpServers = appendWorkspaceFoldersToFilesystemMcpServers(
       params.mcpServers,
       params.workspacePath,
+      projectSourceFolders,
     );
     const resolvedMcpServers = cuaProductMcpServerResolver
       ? await cuaProductMcpServerResolver.resolveMcpServers(mcpServers, {

@@ -102,11 +102,42 @@ const remoteWorkspaceTargetSchema = z.discriminatedUnion("kind", [
   }),
 ]);
 
+/**
+ * 项目工作区（多源文件夹，primary 为执行锚点）。
+ * 不变量见 specs/project-workspace-multi-folder.md：primary 必须属于 folderPaths，
+ * folderPaths 至少 1 个且去重；元数据只进用户级 settings，不写入项目文件夹。
+ */
+export const projectWorkspaceSchema = z
+  .object({
+    id: nonEmptyStringSchema,
+    name: nonEmptyStringSchema,
+    folderPaths: z.array(nonEmptyStringSchema).min(1),
+    primaryFolderPath: nonEmptyStringSchema,
+    createdAt: z.number().int().nonnegative(),
+  })
+  .superRefine((value, ctx) => {
+    if (!value.folderPaths.includes(value.primaryFolderPath)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["primaryFolderPath"],
+        message: "primaryFolderPath must be one of folderPaths",
+      });
+    }
+    if (new Set(value.folderPaths).size !== value.folderPaths.length) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["folderPaths"],
+        message: "folderPaths must not contain duplicates",
+      });
+    }
+  });
+
 const appWorkspaceSessionEntrySchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("local"),
     workspacePath: nonEmptyStringSchema,
     workspacePurpose: z.enum(["project", "conversation"]).default("project"),
+    projectWorkspaceId: nonEmptyStringSchema.optional(),
   }),
   z.object({
     kind: z.literal("remote"),
@@ -332,6 +363,13 @@ function migrateLegacyWorkspaceSession(value: unknown): unknown {
                 workspacePath: rawEntry.workspacePath,
                 workspacePurpose:
                   rawEntry.workspacePurpose === "conversation" ? "conversation" : "project",
+                // 这里按字段白名单重建本地条目，漏带 projectWorkspaceId 会让项目工作区 tab
+                // 在每次 settings 解析后丢失归属、降级成普通文件夹 tab
+                // （specs/project-workspace-multi-folder.md 恢复规则）。
+                ...(typeof rawEntry.projectWorkspaceId === "string" &&
+                rawEntry.projectWorkspaceId.trim().length > 0
+                  ? { projectWorkspaceId: rawEntry.projectWorkspaceId }
+                  : {}),
               },
             ];
           }
@@ -419,6 +457,7 @@ function migrateLegacyWorkspaceSession(value: unknown): unknown {
 
 const appSettingsObjectSchema = z.object({
   recentProjects: z.array(z.string()).default([]),
+  projectWorkspaces: z.array(projectWorkspaceSchema).default([]),
   locale: localeSchema.default("zh-CN"),
   // 快捷键用户覆盖（语义校验在 ui/src/shortcuts 生效表阶段容错，schema 只管形状）
   shortcutBindings: z.record(z.string(), z.array(z.string())).optional(),
@@ -492,6 +531,7 @@ export const appSettingsSchema = z.preprocess(
 
 export const appSettingsPatchSchema = z.object({
   recentProjects: z.array(z.string()).optional(),
+  projectWorkspaces: z.array(projectWorkspaceSchema).optional(),
   locale: localeSchema.optional(),
   shortcutBindings: z.record(z.string(), z.array(z.string())).optional(),
   localePreference: localePreferenceSchema.optional(),

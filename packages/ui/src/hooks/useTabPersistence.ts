@@ -98,6 +98,7 @@ function buildDefaultPersistPatch(state: TabStoreState): Partial<AppSettings> {
       kind: "local" as const,
       workspacePath: tab.workspacePath,
       ...(tab.workspacePurpose ? { workspacePurpose: tab.workspacePurpose } : {}),
+      ...(tab.projectWorkspaceId ? { projectWorkspaceId: tab.projectWorkspaceId } : {}),
     })),
     lastActiveTabIndex: Math.max(activeIndex, 0),
   };
@@ -181,18 +182,28 @@ export function useTabPersistence({
         if (restorePersistedSession) {
           restoreResult = await restorePersistedSession(settings);
         } else {
-          const tabs = readPersistedWorkspaceSessionEntries(settings).flatMap((entry) =>
-            entry.kind === "local"
-              ? [
-                  entry.workspacePurpose
-                    ? {
-                        workspacePath: entry.workspacePath,
-                        workspacePurpose: entry.workspacePurpose,
-                      }
-                    : entry.workspacePath,
-                ]
-              : [],
+          // 项目工作区恢复：tab 上只带 projectWorkspaceId 投影，恢复时回查
+          // settings.projectWorkspaces，查不到降级为普通文件夹 tab（锚点路径本身仍有效）。
+          // 残留的 projectWorkspaceId 会在下一次持久化写回时被自然清理。
+          const persistedProjectIds = new Set(
+            settings.projectWorkspaces.map((project) => project.id),
           );
+          const tabs = readPersistedWorkspaceSessionEntries(settings).flatMap((entry) => {
+            if (entry.kind !== "local") {
+              return [];
+            }
+            const projectWorkspaceId =
+              entry.projectWorkspaceId && persistedProjectIds.has(entry.projectWorkspaceId)
+                ? entry.projectWorkspaceId
+                : undefined;
+            return [
+              {
+                workspacePath: entry.workspacePath,
+                ...(entry.workspacePurpose ? { workspacePurpose: entry.workspacePurpose } : {}),
+                ...(projectWorkspaceId ? { projectWorkspaceId } : {}),
+              },
+            ];
+          });
           const activeIndex = settings.lastActiveTabIndex ?? 0;
           if (tabs.length > 0) {
             logger.info("[useTabPersistence] 恢复标签页:", tabs);

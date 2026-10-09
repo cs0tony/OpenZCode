@@ -51,6 +51,10 @@ export interface WorkspaceTabOptions {
   workspaceIdentity?: string;
   localWorkspacePath?: string;
   workspacePurpose?: WorkspacePurpose;
+  /** 所属项目工作区 id（settings.projectWorkspaces）；普通文件夹 tab 缺省。 */
+  projectWorkspaceId?: string;
+  /** 覆盖默认"路径尾段"显示名；项目工作区 tab 用项目名。 */
+  label?: string;
 }
 
 export interface RestorableWorkspaceTab {
@@ -61,6 +65,7 @@ export interface RestorableWorkspaceTab {
   workspaceIdentity?: string;
   localWorkspacePath?: string;
   workspacePurpose?: WorkspacePurpose;
+  projectWorkspaceId?: string;
 }
 
 export type WindowTabState = WorkspaceTabState | SettingsTabState;
@@ -133,6 +138,18 @@ export interface TabStoreState {
   restoreTabs: (tabs: Array<string | RestorableWorkspaceTab>, activeIndex: number) => void;
   /** 启动首帧后补齐持久化标签页；保留当前 active identity 和用户在此期间新增的标签页。 */
   completeTabRestore: (tabs: Array<string | RestorableWorkspaceTab>) => void;
+  /**
+   * 项目工作区切换 primary：重锚该项目全部 tab 的 workspacePath 与 label。
+   * 只影响新会话——既有会话绑定各自的 workspacePath，不随锚点迁移
+   * （specs/project-workspace-multi-folder.md）。
+   */
+  reanchorProjectWorkspaceTabs: (
+    projectWorkspaceId: string,
+    nextPrimaryPath: string,
+    nextLabel?: string,
+  ) => void;
+  /** 项目被删除：该项目 tab 降级为普通文件夹 tab（清归属、显示名回落路径尾段）。 */
+  degradeProjectWorkspaceTabs: (projectWorkspaceId: string) => void;
 }
 
 // ============================================================================
@@ -154,13 +171,14 @@ function createWorkspaceTab(
     id: createUuid(),
     kind: "workspace",
     workspacePath,
-    label: labelFromPath(workspacePath),
+    label: options?.label ?? labelFromPath(workspacePath),
     availability: options?.availability,
     remoteSessionId: options?.remoteSessionId,
     remoteTarget: options?.remoteTarget,
     workspaceIdentity: options?.workspaceIdentity,
     localWorkspacePath: options?.localWorkspacePath,
     workspacePurpose: options?.workspacePurpose,
+    projectWorkspaceId: options?.projectWorkspaceId,
   };
 }
 
@@ -177,6 +195,8 @@ function mergeWorkspaceTabOptions(
     workspaceIdentity: options?.workspaceIdentity ?? tab.workspaceIdentity,
     localWorkspacePath: options?.localWorkspacePath ?? tab.localWorkspacePath,
     workspacePurpose: options?.workspacePurpose ?? tab.workspacePurpose,
+    projectWorkspaceId: options?.projectWorkspaceId ?? tab.projectWorkspaceId,
+    label: options?.label ?? tab.label,
   };
 }
 
@@ -581,6 +601,7 @@ export function createTabStore(storage: StorageLike | null | undefined = undefin
           workspaceIdentity: normalized.workspaceIdentity,
           workspacePurpose: normalized.workspacePurpose,
           availability: normalized.availability,
+          projectWorkspaceId: normalized.projectWorkspaceId,
         });
       });
       const safeIndex = Math.min(Math.max(activeIndex, 0), tabs.length - 1);
@@ -614,6 +635,7 @@ export function createTabStore(storage: StorageLike | null | undefined = undefin
             localWorkspacePath: normalized.localWorkspacePath,
             workspacePurpose: normalized.workspacePurpose,
             availability: normalized.availability,
+            projectWorkspaceId: normalized.projectWorkspaceId,
           };
           const existing = state.tabs.find(
             (tab): tab is WorkspaceTabState =>
@@ -648,6 +670,45 @@ export function createTabStore(storage: StorageLike | null | undefined = undefin
           ),
         };
       });
+    },
+    reanchorProjectWorkspaceTabs: (projectWorkspaceId, nextPrimaryPath, nextLabel) => {
+      set((state) => {
+        let reanchoredActive = false;
+        const tabs = state.tabs.map((tab) => {
+          if (!isWorkspaceTab(tab) || tab.projectWorkspaceId !== projectWorkspaceId) {
+            return tab;
+          }
+          if (tab.id === state.activeTabId) {
+            reanchoredActive = true;
+          }
+          return {
+            ...tab,
+            workspacePath: nextPrimaryPath,
+            label: nextLabel ?? tab.label,
+          };
+        });
+        return {
+          tabs,
+          // 锚点切换后激活投影必须跟随，否则 composer/会话视图仍写旧 cwd。
+          activeWorkspacePath: reanchoredActive ? nextPrimaryPath : state.activeWorkspacePath,
+          activeWorkspaceIdentity: reanchoredActive ? null : state.activeWorkspaceIdentity,
+        };
+      });
+    },
+
+    degradeProjectWorkspaceTabs: (projectWorkspaceId) => {
+      set((state) => ({
+        tabs: state.tabs.map((tab) => {
+          if (!isWorkspaceTab(tab) || tab.projectWorkspaceId !== projectWorkspaceId) {
+            return tab;
+          }
+          return {
+            ...tab,
+            projectWorkspaceId: undefined,
+            label: labelFromPath(tab.workspacePath),
+          };
+        }),
+      }));
     },
   }));
 }
