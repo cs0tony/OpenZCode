@@ -1,0 +1,269 @@
+# OpenZCode 自动打包工作流。
+#
+# 覆盖仓库现有三类打包产物（入口见根 package.json scripts）：
+# 1. desktop  —— electron-builder 桌面安装包：mac dmg/zip、win NSIS exe、
+#    linux AppImage/deb/rpm/pacman。打包链路（scripts/bundle.mjs、
+#    packages/desktop/scripts/target-platform.mjs）原生支持通过命令行参数
+#    `--os/--arch` 交叉打包，因此同 OS runner 可以产出另一架构的安装包。
+# 2. cli-sea  —— apps/zcode-cli 的 Node SEA 单文件可执行（6 个目标：
+#    darwin/linux/win × x64/arm64），见 apps/zcode-cli/packages/cli/scripts/build-sea.mjs。
+#    darwin 目标需要 macOS 宿主做 ad-hoc codesign，因此按 OS 拆分 job。
+# 3. distribution —— `pnpm build:zcode`（scripts/build-zcode.mjs）产出的
+#    web + server + agent + TUI runtime 自托管分发包（tar.gz + sha256 + install.sh）。
+#
+# 触发：push v* 标签（并自动创建 GitHub Release）、手动 workflow_dispatch。
+# macOS 签名为可选项：配置 MAC_CSC_LINK / MAC_CSC_KEY_PASSWORD / MAC_SIGNING_IDENTITY
+# 三个 secrets 后自动启用（ZCODE_ENABLE_MAC_SIGN，见 electron-builder.config.js）；
+# 未配置时产出未签名安装包。公证由打包配置显式关闭（notarize: false，两段式流水线）。
+
+name: Package
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      build_desktop:
+        description: 构建桌面安装包（dmg/zip/exe/AppImage/deb/rpm/pacman）
+        type: boolean
+        default: true
+      build_cli_sea:
+        description: 构建 CLI SEA 单文件可执行
+        type: boolean
+        default: true
+      build_distribution:
+        description: 构建服务端/CLI 分发包（tar.gz）
+        type: boolean
+        default: true
+      zcode_env:
+        description: 后端环境（test 会给安装包文件名加 _TEST 后缀并使用 Preview 身份）
+        type: choice
+        default: production
+        options:
+          - production
+          - test
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # mise.toml 锁定的工具链版本。
+  NODE_VERSION: "24.14.0"
+  ZCODE_ENV: ${{ inputs.zcode_env || 'production' }}
+
+jobs:
+  desktop:
+    name: Desktop ${{ matrix.os }}/${{ matrix.arch }}
+    if: github.event_name != 'workflow_dispatch' || inputs.build_desktop
+    runs-on: ${{ matrix.runs-on }}
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: mac
+            arch: arm64
+            runs-on: macos-15
+          # mac/x64 在 arm64 runner 上交叉打包：Electron runtime、node-pty 预编译、
+          # koffi、native-search 全部按目标平台预编译，window-bounds 助手产出
+          # universal 二进制，构建链路按 ZCODE_TARGET_OS/ZCODE_TARGET_ARCH 出包。
+          - os: mac
+            arch: x64
+            runs-on: macos-15
+          - os: win
+            arch: x64
+            runs-on: windows-latest
+          # win/arm64 在 x64 runner 上交叉打包（node-pty/koffi/ugrep 均有 win32-arm64 预编译）。
+          - os: win
+            arch: arm64
+            runs-on: windows-latest
+          - os: linux
+            arch: x64
+            runs-on: ubuntu-24.04
+          - os: linux
+            arch: arm64
+            runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      # rpm 配置注释明确要求：fpm 产 rpm 需要构建机提供 rpmbuild 与 xz。
+      - name: Install Linux packaging dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # 三者齐备才打开 ZCODE_ENABLE_MAC_SIGN；electron-builder 会读取
+      # CSC_LINK 自动导入钥匙串，identity 取 APPLE_SIGNING_IDENTITY。
+      - name: Resolve macOS signing settings
+        if: runner.os == 'macOS'
+        env:
+          ZCODE_MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          ZCODE_MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          ZCODE_MAC_SIGNING_IDENTITY: ${{ secrets.MAC_SIGNING_IDENTITY }}
+        run: |
+          if [ -n "$ZCODE_MAC_CSC_LINK" ] && [ -n "$ZCODE_MAC_CSC_KEY_PASSWORD" ] && [ -n "$ZCODE_MAC_SIGNING_IDENTITY" ]; then
+            echo "ZCODE_ENABLE_MAC_SIGN=1" >> "$GITHUB_ENV"
+            echo "CSC_LINK=$ZCODE_MAC_CSC_LINK" >> "$GITHUB_ENV"
+            echo "CSC_KEY_PASSWORD=$ZCODE_MAC_CSC_KEY_PASSWORD" >> "$GITHUB_ENV"
+            echo "APPLE_SIGNING_IDENTITY=$ZCODE_MAC_SIGNING_IDENTITY" >> "$GITHUB_ENV"
+          else
+            echo "[signing] 未配置 macOS 证书 secrets，产出未签名安装包"
+          fi
+
+      - name: Bundle desktop app (${{ matrix.os }}/${{ matrix.arch }})
+        env:
+          # Windows 打包不依赖 mock-cdn remote 资产（见 prepare-runtime-assets.mjs 注释）。
+          ZCODE_SKIP_REMOTE_ASSETS: ${{ runner.os == 'Windows' && '1' || '0' }}
+          # GitHub runner 直连官方源比配置里的 npmmirror 默认值更稳。
+          ZCODE_NODE_DIST_MIRROR: https://nodejs.org/dist
+          ZCODE_ELECTRON_RUNTIME_MIRROR: https://github.com/electron/electron/releases/download/
+          ELECTRON_BUILDER_BINARIES_MIRROR: https://github.com/electron-userland/electron-builder-binaries/releases/download/
+        run: pnpm bundle:desktop -- --os ${{ matrix.os }} --arch ${{ matrix.arch }}
+
+      - name: Upload desktop artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.os }}-${{ matrix.arch }}
+          path: |
+            packages/desktop/dist/*.dmg
+            packages/desktop/dist/*.zip
+            packages/desktop/dist/*.exe
+            packages/desktop/dist/*.AppImage
+            packages/desktop/dist/*.deb
+            packages/desktop/dist/*.rpm
+            packages/desktop/dist/*.pkg.tar.zst
+          if-no-files-found: error
+
+  cli-sea:
+    name: CLI SEA (${{ matrix.os }})
+    if: github.event_name != 'workflow_dispatch' || inputs.build_cli_sea
+    runs-on: ${{ matrix.runs-on }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # darwin 二进制必须在 macOS 上构建：注入后要做 ad-hoc codesign，
+          # 且 host 目标（darwin-arm64）才会执行冒烟测试。
+          - os: darwin
+            runs-on: macos-15
+            targets: "--target darwin-arm64 --target darwin-x64"
+          - os: linux
+            runs-on: ubuntu-24.04
+            targets: "--target linux-x64 --target linux-arm64"
+          - os: win
+            runs-on: windows-latest
+            targets: "--target win-x64 --target win-arm64"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # 与 @zcode/cli 的 build:sea 保持同序：先 turbo 构建依赖包，再打 zcode.cjs，
+      # 最后按 runner 平台注入 SEA blob（脚本自行下载各目标官方 Node 二进制）。
+      - name: Build CLI dependency packages
+        run: pnpm exec turbo --skip-infer --cwd apps/zcode-cli run build --filter=!@zcode/cli --force
+
+      - name: Build CLI bundle
+        run: pnpm --dir apps/zcode-cli/packages/cli build
+
+      - name: Build SEA binaries
+        run: node apps/zcode-cli/packages/cli/scripts/build-sea.mjs ${{ matrix.targets }}
+
+      - name: Upload SEA binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-sea-${{ matrix.os }}
+          # dist 里同时有 SEA 中间产物 zcode-<target>.sea.blob，只上传最终可执行。
+          path: |
+            apps/zcode-cli/packages/cli/dist/zcode-*
+            !apps/zcode-cli/packages/cli/dist/*.sea.blob
+          if-no-files-found: error
+
+  distribution:
+    name: Server/CLI distribution (tar.gz)
+    if: github.event_name != 'workflow_dispatch' || inputs.build_distribution
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # --base-url 会内嵌进 install.sh 的默认下载地址；发布时通过
+      # latest.json 里的 baseUrl 或部署侧变量替换为真实 CDN 地址。
+      - name: Build distribution package
+        env:
+          ZCODE_NODE_DIST_MIRROR: https://nodejs.org/dist
+        run: pnpm build:zcode -- --base-url https://zcode.invalid/zcode/
+
+      - name: Upload distribution artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: distribution
+          path: |
+            dist/zcode/install.sh
+            dist/zcode/latest.json
+            dist/zcode/releases/**
+          if-no-files-found: error
+
+  release:
+    name: Attach artifacts to GitHub Release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs:
+      - desktop
+      - cli-sea
+      - distribution
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: artifacts/**/*
