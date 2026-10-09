@@ -197,12 +197,12 @@ jobs:
       - name: Build CLI bundle
         run: pnpm --dir apps/zcode-cli/packages/cli build
 
-      # build-sea 的 TUI 资产收集器要求依赖闭包里的 workspace 包都带 dist；
-      # @zcode/tui 依赖的 @zcode/shared 在根 workspace 且没有 build 脚本，
-      # 本地 dist 只是根目录 `pnpm typecheck`（tsc -b 发射 JS 到 outDir）的副产品，
-      # CI 干净检出必须显式编译，否则 collectSeaTuiAssets 报 Missing dist files。
-      - name: Build @zcode/shared dist
-        run: pnpm exec tsc -b packages/shared
+      # build-sea 的 TUI 资产收集器要求依赖闭包里的 workspace 包都带 dist。闭包里的
+      # 根 workspace 包只有 @zcode/shared（无 build 脚本）与 @zcode/model-option-map，
+      # 本地 dist 是开发时 `pnpm typecheck` / `pnpm -r build` 的副产品；CI 干净检出
+      # 必须显式编译，否则 collectSeaTuiAssets 报 Missing dist files。
+      - name: Build root workspace dist
+        run: pnpm exec tsc -b packages/shared packages/model-option-map
 
       - name: Build SEA binaries
         run: node apps/zcode-cli/packages/cli/scripts/build-sea.mjs ${{ matrix.targets }}
@@ -238,10 +238,9 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # 与 cli-sea job 同因：build:zcode 的 stageTuiRuntime 复用 collectSeaTuiAssets，
-      # 要求依赖闭包里的 workspace 包都带 dist；@zcode/shared 在根 workspace 且没有
-      # build 脚本，本地 dist 是根目录 `pnpm typecheck` 的副产品，CI 必须显式编译。
-      - name: Build @zcode/shared dist
-        run: pnpm exec tsc -b packages/shared
+      # 要求依赖闭包里的 workspace 包都带 dist。此处构建命令与 cli-sea 一致。
+      - name: Build root workspace dist
+        run: pnpm exec tsc -b packages/shared packages/model-option-map
 
       # --base-url 会内嵌进 install.sh 的默认下载地址；发布时通过
       # latest.json 里的 baseUrl 或部署侧变量替换为真实 CDN 地址。
