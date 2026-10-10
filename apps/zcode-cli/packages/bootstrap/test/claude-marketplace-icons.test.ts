@@ -71,7 +71,10 @@ test("applyIconSourcesToManifestRaw：按名合并拼基址，已有 icon 不覆
   // 名单为空与 plugins 缺失都是合法降级：原样跳过，不抛错。
   const untouched: Record<string, unknown> = { plugins: [{ name: "listed" }] };
   applyIconSourcesToManifestRaw(untouched, new Map());
-  assert.equal("icon" in ((untouched.plugins as Array<unknown>)[0] ?? {}), false);
+  assert.equal(
+    "icon" in ((untouched.plugins as Array<Record<string, unknown>>)[0] ?? {}),
+    false,
+  );
   applyIconSourcesToManifestRaw({}, new Map([["listed", "listed/icon.png"]]));
 });
 
