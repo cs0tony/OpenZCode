@@ -19,7 +19,11 @@ import { app, BrowserWindow, ipcMain, Menu } from "electron";
 import pkg, { CancellationToken } from "electron-updater";
 import semver from "semver";
 import { logger } from "./logger.js";
-import { getElectronReleasePlatform, ManifestUpdateProvider } from "./manifestUpdateProvider.js";
+import {
+  getElectronReleasePlatform,
+  ManifestUpdateProvider,
+} from "./manifestUpdateProvider.js";
+import { GitHubReleaseUpdateProvider, OPEN_ZCODE_RELEASE_REPO } from "./githubReleaseUpdateProvider.js";
 const { autoUpdater } = pkg;
 
 export const CHECK_FOR_UPDATE_MENU_ID = "check-for-update";
@@ -751,26 +755,45 @@ async function syncAutoUpdateCheckChannelFromSettings(
   activeAutoUpdateCheckChannel = nextChannel;
 }
 
-function applyManifestUpdateProvider(options: InitAutoUpdaterOptions): void {
+function applyUpdateFeedProvider(options: InitAutoUpdaterOptions): void {
   const manifestUrl = options.updateFeedSource?.url.trim();
+  // OpenZCode 的默认 feed 是本仓库 GitHub Releases（specs/desktop-github-release-update.md）。
+  // 修复依据：此前的默认 provider 是官方 ZCode 服务端 manifest（zcode.z.ai），
+  // 检测并下载的是官方安装包，用户点击更新后 OpenZCode 会被官方版本覆盖。
+  // manifestUrl 仅剩 dev 联调用途（打包态已在 resolveUpdateFeedSourceFromStartupConfig 忽略），
+  // 显式提供时才继续走服务端 manifest provider。
+  // 分支直接以 manifestUrl 判断，保持 TS 对它的 string 收窄（布尔间接判断会让收窄失效）。
+  const resolveReleaseChannel = async (): Promise<ElectronReleaseChannel> => {
+    availableUpdateChannel = await resolveUpdateReleaseChannel(options.settingService);
+    return availableUpdateChannel;
+  };
+  if (manifestUrl) {
+    autoUpdater.setFeedURL({
+      provider: "custom",
+      updateProvider: ManifestUpdateProvider,
+      endpointOrigin: DEFAULT_ZCODE_ENDPOINT_ORIGIN,
+      manifestUrl,
+      releasePlatform: getElectronReleasePlatform(),
+      deviceMid: options.deviceMid,
+      resolveEndpointOrigin:
+        options.resolveEndpointOrigin ?? (() => resolveRuntimeZCodeEndpointOrigin(process.env)),
+      resolveReleaseChannel,
+    });
+    logger.info(
+      `[auto-update] service manifest provider applied platform=${getElectronReleasePlatform()} manifestUrl=${redactUpdateFeedUrlForLog(manifestUrl)}`,
+    );
+    return;
+  }
+
   autoUpdater.setFeedURL({
     provider: "custom",
-    updateProvider: ManifestUpdateProvider,
-    endpointOrigin: DEFAULT_ZCODE_ENDPOINT_ORIGIN,
-    ...(manifestUrl ? { manifestUrl } : {}),
+    updateProvider: GitHubReleaseUpdateProvider,
     releasePlatform: getElectronReleasePlatform(),
     deviceMid: options.deviceMid,
-    resolveEndpointOrigin:
-      options.resolveEndpointOrigin ?? (() => resolveRuntimeZCodeEndpointOrigin(process.env)),
-    resolveReleaseChannel: async () => {
-      availableUpdateChannel = await resolveUpdateReleaseChannel(options.settingService);
-      return availableUpdateChannel;
-    },
+    resolveReleaseChannel,
   });
   logger.info(
-    manifestUrl
-      ? `[auto-update] service manifest provider applied platform=${getElectronReleasePlatform()} manifestUrl=${redactUpdateFeedUrlForLog(manifestUrl)}`
-      : `[auto-update] service manifest provider applied platform=${getElectronReleasePlatform()}`,
+    `[auto-update] github release provider applied platform=${getElectronReleasePlatform()} repo=${OPEN_ZCODE_RELEASE_REPO}`,
   );
 }
 
@@ -1504,7 +1527,7 @@ export async function initAutoUpdater(options: InitAutoUpdaterOptions = {}): Pro
   // 这里仅在 Windows 关闭“退出即自动安装”，要求用户显式点更新；其他平台保持原有行为，避免改动既有升级链路。
   autoUpdater.autoInstallOnAppQuit = process.platform !== "win32";
   autoUpdater.logger = logger;
-  applyManifestUpdateProvider(options);
+  applyUpdateFeedProvider(options);
 
   const triggerCheckForUpdates = (reason: string) => {
     if (checkForUpdatesInFlight) {

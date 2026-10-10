@@ -123,7 +123,7 @@ function resolveManifestUrl(pathname: string, baseUrl: URL): URL {
   return new URL(pathname, baseUrl);
 }
 
-function getLinuxUpdateExtensions(updater: AppUpdater): readonly string[] | null {
+export function getLinuxUpdateExtensions(updater: AppUpdater): readonly string[] | null {
   // Linux 的实际更新器由安装包类型决定，不能把 deb/rpm/pacman 统一当作
   // 不支持更新的产物删除；复用已有 updater 实例，避免再次读取安装类型产生分歧。
   if (updater instanceof AppImageUpdater) return [".appimage"];
@@ -231,7 +231,11 @@ export class ManifestUpdateProvider extends Provider<UpdateInfo> {
     }
 
     return {
-      ...(parsed as UpdateInfo),
+      // 修复 TS2352：parseYaml 结果经 isRecord 收窄为 Record<string, unknown>，
+      // 而 UpdateInfo 是接口（无隐式索引签名），两者双向都不可赋值，TS 拒绝直接断言。
+      // manifest 的运行时形态已在上游校验（isRecord + version 为 string），
+      // files 缺失的情况由 readManifestFileList 兜底，这里按 TS 提示经 unknown 中转断言。
+      ...(parsed as unknown as UpdateInfo),
       // preview/stable 切换时旧 manifest 请求可能晚于新请求返回。
       // electron-updater 的 update-available 事件默认不带请求通道，main 进程无法识别过期结果；
       // 这里把本次请求通道随 UpdateInfo 带回去，避免旧通道覆盖更新弹窗内容。
