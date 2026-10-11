@@ -70,6 +70,7 @@ import { PluginsSection } from "@/settings/PluginsSection.js";
 import { HooksSection } from "@/settings/HooksSection.js";
 import { WorkspaceFileSearchSection } from "@/settings/WorkspaceFileSearchSection.js";
 import { MemorySettingsSection } from "@/settings/MemorySettingsSection.js";
+import { PersonalizationSection } from "@/settings/PersonalizationSection.js";
 import { BrowserSettingsSection } from "@/settings/BrowserSettingsSection.js";
 import { ComputerUseSection } from "@/settings/ComputerUseSection.js";
 import { ShortcutSettingsSection } from "@/settings/ShortcutSettingsSection.js";
@@ -1831,6 +1832,11 @@ export function SettingsPage({
                               projectMemoryViewerAvailable={Boolean(isDesktop)}
                               workspaceDisplayNames={memoryWorkspaceDisplayNames}
                             />
+                          </ServiceProvider>
+                        ) : activeSection === "personalization" ? (
+                          <ServiceProvider services={localHostServices}>
+                            {/* 用户级 AGENTS.md 是本机全局事实源；激活远端 workspace 时也不能注入远端 Host。 */}
+                            <PersonalizationSection isDesktop={Boolean(isDesktop)} />
                           </ServiceProvider>
                         ) : activeSection === "plugin" ? (
                           <PluginsSection

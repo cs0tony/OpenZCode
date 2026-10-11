@@ -2035,6 +2035,25 @@ const zhCN: Record<string, string> = {
   "settings.nativeSearchEnhancementsDescription":
     "在新建会话或应用重启后恢复的会话中使用增强 Find 和 Grep。当前会话保持现有设置；Windows 的 Find 保持不变。",
   "settings.memory": "记忆",
+  "settings.personalization.title": "个性化",
+  "settings.personalization.description":
+    "自定义指令是本机的全局 AGENTS.md，会作为默认指令注入所有工作区。修改在保存后的新会话中生效，正在运行的会话不受影响。",
+  "settings.personalization.pathLabel": "文件：",
+  "settings.personalization.notCreatedHint": "该文件尚不存在，保存后将自动创建。",
+  "settings.personalization.editorLabel": "自定义指令编辑器",
+  "settings.personalization.save": "保存",
+  "settings.personalization.saved": "自定义指令已保存",
+  "settings.personalization.saveFailed": "保存自定义指令失败",
+  "settings.personalization.loadFailed": "读取自定义指令失败",
+  "settings.personalization.loadFailedHint":
+    "无法读取当前文件内容，已暂停编辑以避免误覆盖现有指令。",
+  "settings.personalization.retry": "重试",
+  "settings.personalization.tooLarge": "内容超过 256KB 上限，请精简后再保存。",
+  "settings.personalization.unsaved": "有未保存的修改",
+  "settings.personalization.effectHint": "保存后对所有工作区的新会话生效。",
+  "settings.personalization.reveal": "打开所在文件夹",
+  "settings.personalization.revealHint": "文件创建后可用",
+  "settings.personalization.revealFailed": "打开文件夹失败",
   "settings.memory.workspaceMemory": "工作区记忆",
   "settings.memoryDescription":
     "在工作区中保存并复用长期上下文，新会话生效。开启后可能增加模型调用和 Token 成本。",

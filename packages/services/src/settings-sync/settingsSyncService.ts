@@ -20,6 +20,8 @@ import type {
   SettingsSyncSourceScope,
   SettingsSyncSourceRootSummary,
   SettingsSyncTaskImportResult,
+  SettingsSyncUserAgentsFile,
+  SettingsSyncUserAgentsFileWriteResult,
 } from "@zcode/shared";
 import {
   copyFile,
@@ -29,12 +31,17 @@ import {
   mkdir,
   readFile,
   readdir,
+  rename,
   symlink,
+  unlink,
   writeFile,
 } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
-import { OPEN_ZCODE_DATA_DIR_NAME } from "@zcode/shared";
+import {
+  OPEN_ZCODE_DATA_DIR_NAME,
+  SETTINGS_SYNC_USER_AGENTS_FILE_MAX_BYTES,
+} from "@zcode/shared";
 import { parse as parseYaml } from "yaml";
 import { parse as parseToml } from "smol-toml";
 import { CommandFileParser } from "../commands/commandFileParser.js";
@@ -2258,6 +2265,57 @@ async function copyClaudeAgentsFileToZcodeAgentsFile(params: {
   };
 }
 
+async function readUserAgentsFile(): Promise<SettingsSyncUserAgentsFile> {
+  const filePath = getUserZcodeAgentsFilePath();
+  const exists = await pathExists(filePath);
+  if (!exists) {
+    return {
+      path: filePath,
+      directoryPath: dirname(filePath),
+      exists: false,
+      content: null,
+    };
+  }
+  const content = await readFile(filePath, "utf8");
+  return {
+    path: filePath,
+    directoryPath: dirname(filePath),
+    exists: true,
+    content,
+  };
+}
+
+async function writeUserAgentsFile(params: {
+  content: string;
+}): Promise<SettingsSyncUserAgentsFileWriteResult> {
+  const targetPath = getUserZcodeAgentsFilePath();
+  const bytes = Buffer.byteLength(params.content, "utf8");
+  if (bytes > SETTINGS_SYNC_USER_AGENTS_FILE_MAX_BYTES) {
+    throw new Error(
+      `user AGENTS.md content exceeds limit: ${bytes} > ${SETTINGS_SYNC_USER_AGENTS_FILE_MAX_BYTES} bytes`,
+    );
+  }
+
+  const existed = await pathExists(targetPath);
+  await mkdir(dirname(targetPath), { recursive: true });
+  // 原子写：agent 上下文构建随时可能读取该文件，直接覆写可能被读到半截内容；
+  // 先写同目录临时文件再 rename，失败时尽力清理临时文件。
+  const tempPath = `${targetPath}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    await writeFile(tempPath, params.content, "utf8");
+    await rename(tempPath, targetPath);
+  } catch (error) {
+    await unlink(tempPath).catch(() => {});
+    throw error;
+  }
+
+  return {
+    path: targetPath,
+    bytesWritten: bytes,
+    created: !existed,
+  };
+}
+
 export function createSettingsSyncService(
   dependencies: SettingsSyncServiceDependencies,
 ): ISettingsSyncService {
@@ -2290,6 +2348,22 @@ export function createSettingsSyncService(
         status: result.status,
         overwritten: result.overwritten,
         skippedReason: result.skippedReason,
+      });
+      return result;
+    },
+
+    async readUserAgentsFile(): Promise<SettingsSyncUserAgentsFile> {
+      return readUserAgentsFile();
+    },
+
+    async writeUserAgentsFile(request: {
+      content: string;
+    }): Promise<SettingsSyncUserAgentsFileWriteResult> {
+      const result = await writeUserAgentsFile({ content: request.content });
+      log.info("[settings-sync] user AGENTS.md saved", {
+        path: result.path,
+        bytesWritten: result.bytesWritten,
+        created: result.created,
       });
       return result;
     },

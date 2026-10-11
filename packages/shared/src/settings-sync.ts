@@ -200,3 +200,22 @@ export interface SettingsSyncImportResult {
 export interface SettingsSyncFirstRunPromptState {
   handled: boolean;
 }
+
+/** 用户级 AGENTS.md 的写入上限（UTF-8 字节），防止把超大文本灌进模型上下文。 */
+export const SETTINGS_SYNC_USER_AGENTS_FILE_MAX_BYTES = 256 * 1024;
+
+export interface SettingsSyncUserAgentsFile {
+  path: string;
+  /** 文件所在目录（~/.openzcode），供"打开所在文件夹"使用，渲染进程无需自行拼接路径。 */
+  directoryPath: string;
+  exists: boolean;
+  /** 文件不存在时为 null；存在时为 UTF-8 全文。 */
+  content: string | null;
+}
+
+export interface SettingsSyncUserAgentsFileWriteResult {
+  path: string;
+  bytesWritten: number;
+  /** 本次保存是否新建了文件（此前不存在）。 */
+  created: boolean;
+}

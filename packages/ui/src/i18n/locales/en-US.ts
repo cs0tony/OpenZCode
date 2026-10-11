@@ -2168,6 +2168,28 @@ const enUS: Record<string, string> = {
   "settings.nativeSearchEnhancementsDescription":
     "Use enhanced Find and Grep in new sessions and sessions restored after an app restart. Active sessions keep their current setting; Find remains unchanged on Windows.",
   "settings.memory": "Memory",
+  "settings.personalization.title": "Personalization",
+  "settings.personalization.description":
+    "Custom instructions are the global AGENTS.md for this machine and act as your default instructions in every workspace. Only new sessions pick up changes; running sessions are unaffected.",
+  "settings.personalization.pathLabel": "File:",
+  "settings.personalization.notCreatedHint":
+    "This file does not exist yet. It will be created when you save.",
+  "settings.personalization.editorLabel": "Custom instructions editor",
+  "settings.personalization.save": "Save",
+  "settings.personalization.saved": "Custom instructions saved",
+  "settings.personalization.saveFailed": "Failed to save custom instructions",
+  "settings.personalization.loadFailed": "Failed to load custom instructions",
+  "settings.personalization.loadFailedHint":
+    "Could not read the current file. Editing is disabled to avoid overwriting existing content.",
+  "settings.personalization.retry": "Retry",
+  "settings.personalization.tooLarge":
+    "Content exceeds the 256 KB limit. Shorten it before saving.",
+  "settings.personalization.unsaved": "Unsaved changes",
+  "settings.personalization.effectHint":
+    "Applies to new sessions in all workspaces after saving.",
+  "settings.personalization.reveal": "Show in Folder",
+  "settings.personalization.revealHint": "Available after the file is created",
+  "settings.personalization.revealFailed": "Failed to open the folder",
   "settings.memory.workspaceMemory": "Workspace Memory",
   "settings.memoryDescription":
     "Save and reuse long-term context in workspaces. Applies to new sessions and may increase model requests and token costs.",

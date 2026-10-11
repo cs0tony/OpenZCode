@@ -15,6 +15,7 @@ import {
   Blocks,
   Globe2,
   Cable,
+  UserRound,
   WandSparkles,
   Keyboard,
   FileSearch,
@@ -65,6 +66,14 @@ const BASE_SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
     id: "appearance",
     icon: Palette,
     titleId: "settings.appearanceTitle",
+    groupId: "basics",
+  },
+  // 个性化（用户级 AGENTS.md 自定义指令）紧跟「外观」：同属个人偏好，
+  // 仅桌面端提供（文件在本机 ~/.openzcode 下），Web/远控端暂不放出入口。
+  {
+    id: "personalization",
+    icon: UserRound,
+    titleId: "settings.personalization.title",
     groupId: "basics",
   },
   {
@@ -161,7 +170,11 @@ const BASE_SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
 // 兼容既有只读消费者：默认配置代表不带桌面平台能力的 Web 视图；
 // macOS/Windows/Linux 必须继续通过 createSettingsPageConfig 动态加入 Computer Use。
 export const SETTINGS_SECTIONS = BASE_SETTINGS_SECTIONS.filter(
-  (section) => section.id !== "computerUse" && isSettingsSectionEnabled(section.id),
+  (section) =>
+    section.id !== "computerUse" &&
+    // 用户级 AGENTS.md 在本机文件系统上，Web 视图不提供编辑入口。
+    section.id !== "personalization" &&
+    isSettingsSectionEnabled(section.id),
 );
 
 interface SettingsPageConfigOptions {
@@ -178,6 +191,8 @@ export function createSettingsPageConfig({
   const showComputerUse = isDesktop || isMacDesktop || isWindowsDesktop;
   const settingsSections = BASE_SETTINGS_SECTIONS.filter((section) => {
     if (section.id === "computerUse" && !showComputerUse) return false;
+    // 用户级 AGENTS.md 编辑依赖本机文件系统与 settings-sync 本地 Host，仅桌面端放出。
+    if (section.id === "personalization" && !isDesktop) return false;
     return isSettingsSectionEnabled(section.id);
   });
   const settingsSectionGroups = BASE_SETTINGS_SECTION_GROUPS.map((group) => ({
