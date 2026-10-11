@@ -174,7 +174,7 @@ function formatBrowserAmbientUserInput(
     ...(context.currentUrl ? [`- Current URL: ${context.currentUrl}`] : []),
     "</in-app-browser-context>",
     "",
-    "## My request for OpenZCode:",
+    "## My request for ZCode:",
     input,
   ];
   return lines.join("\n");
