@@ -84,6 +84,15 @@ const macSigningIdentity =
   rawMacSigningIdentity?.replace(/^Developer ID Application:\s*/, "") ?? null;
 const shouldEnableMacSigning =
   process.env.ZCODE_ENABLE_MAC_SIGN === "1" && Boolean(macSigningIdentity);
+// 未配置证书 secrets 时改用 electron-builder 原生 ad-hoc 身份（identity "-"）：
+// @electron/osx-sign 会按依赖深度对 .app 内全部嵌套代码与裸 Mach-O（含 Resources
+// 下的 rg/ugrep/window-bounds、asar.unpacked 的 dylib）逐个签名，并在结束后自动跑
+// codesign --verify --deep --strict 校验，产物具备完整密封资源，arm64 可执行。
+// 注意 ad-hoc 没有受信证书链：浏览器下载（带隔离属性）首次打开仍会被 Gatekeeper
+// 以"已损坏"拦截，需 xattr -cr 移除隔离属性；"下载即可打开"只有 Developer ID 签名
+// 加公证一条路。此前 identity: null 会整体跳过签名，连 ad-hoc 都不做，
+// 未签名包在 arm64 上被拦截后连 xattr 绕过都不可靠，因此这里降级到 ad-hoc 而非跳过。
+const shouldAdhocSignMac = !shouldEnableMacSigning;
 const workspaceRoot = resolve(import.meta.dirname, "../..");
 const desktopPackageRoot = import.meta.dirname;
 const runtimeModuleLookupRoots = [
@@ -667,28 +676,20 @@ export default {
     // 预签名脚本走的是原生 codesign，要求完整的 "Developer ID Application: ..." 身份串；
     // 但 electron-builder 的 mac.identity 在 26.x 下会拒绝带此前缀的名字。
     // 这里仅对 electron-builder 侧做前缀归一化，避免本地预签名和最终 .app 签名互相打架。
-    // z-code 之前只有本地未签名打包配置，CI 即使注入了证书变量，
-    // electron-builder 也不会自动切到 hardened runtime / entitlement 这套发布参数。
-    // 这里显式收拢到环境开关，保证本地开发不被签名配置绑死，CI 发布时再按需打开。
-    identity: shouldEnableMacSigning ? macSigningIdentity : null,
+    // 证书模式走 Developer ID 发布链路；无证书时用 "-" 让 electron-builder 走原生
+    // ad-hoc 签名（见 shouldAdhocSignMac 注释），不再回退到"整体跳过签名"。
+    identity: shouldEnableMacSigning ? macSigningIdentity : "-",
     // macOS 产物采用“build 阶段签名 + 独立公证阶段”的两段式流水线。
     // 如果这里不显式关闭 electron-builder 内置 notarize，它会在 build 阶段读取 Apple 凭据后直接尝试公证，
     // 并强制要求 APPLE_APP_SPECIFIC_PASSWORD，导致 build 还没产出 DMG 就提前失败。
     notarize: false,
     hardenedRuntime: shouldEnableMacSigning,
+    // ad-hoc 身份没有可校验的证书链，时间戳无意义；显式 --timestamp=none 避免签名时
+    // 联网请求 Apple TSA 失败中断打包。证书模式保持默认（联网加可信时间戳）。
+    timestamp: shouldAdhocSignMac ? "none" : undefined,
     gatekeeperAssess: false,
     entitlements: "build/entitlements.mac.plist",
     entitlementsInherit: "build/entitlements.mac.inherit.plist",
-    // runtime 可执行文件已在打包前的独立预签名阶段完成签名，
-    // electron-builder 在签主 app 时若继续深度扫描这些目录，会显著拉长 macOS codesign 时长。
-    // 这里按“任意前缀 + Contents/Resources”匹配绝对路径，避免 ^Contents/... 在 CI 中无法命中。
-    // 命中后可跳过已预签名目录的重复签名/遍历，同时保留主 app 与框架签名。
-    // CUA Helper 在独立 job 中已完成 Developer ID 签名和 notarization staple；
-    // electron-builder 若再次签名嵌套 Helper 会改变 CDHash，使最终用户包中的 staple 失效。
-    signIgnore: [
-      "[/\\\\]Contents[/\\\\]Resources[/\\\\]glm([/\\\\]|$)",
-      "[/\\\\]Contents[/\\\\]Resources[/\\\\]tools([/\\\\]|$)",
-    ],
   },
   win: {
     target: ["nsis"],

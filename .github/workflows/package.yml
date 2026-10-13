@@ -12,9 +12,11 @@
 #    web + server + agent + TUI runtime 自托管分发包（tar.gz + sha256 + install.sh）。
 #
 # 触发：push v* 标签（并自动创建 GitHub Release）、手动 workflow_dispatch。
-# macOS 签名为可选项：配置 MAC_CSC_LINK / MAC_CSC_KEY_PASSWORD / MAC_SIGNING_IDENTITY
-# 三个 secrets 后自动启用（ZCODE_ENABLE_MAC_SIGN，见 electron-builder.config.js）；
-# 未配置时产出未签名安装包。公证由打包配置显式关闭（notarize: false，两段式流水线）。
+# macOS 签名为可选增强：配置 MAC_CSC_LINK / MAC_CSC_KEY_PASSWORD / MAC_SIGNING_IDENTITY
+# 三个 secrets 后自动启用 Developer ID 签名（ZCODE_ENABLE_MAC_SIGN，见
+# electron-builder.config.js）；未配置时降级为 ad-hoc 完整签名——应用包密封资源有效、
+# arm64 可执行，但没有 Gatekeeper 信任链，浏览器下载首次打开仍需
+# `xattr -cr /Applications/<App>.app` 移除隔离属性；公证由打包配置显式关闭（notarize: false）。
 
 name: Package
 
@@ -127,7 +129,7 @@ jobs:
             echo "CSC_KEY_PASSWORD=$ZCODE_MAC_CSC_KEY_PASSWORD" >> "$GITHUB_ENV"
             echo "APPLE_SIGNING_IDENTITY=$ZCODE_MAC_SIGNING_IDENTITY" >> "$GITHUB_ENV"
           else
-            echo "[signing] 未配置 macOS 证书 secrets，产出未签名安装包"
+            echo "[signing] 未配置 macOS 证书 secrets，使用 ad-hoc 身份完整签名（首次打开需 xattr -cr 移除隔离属性）"
           fi
 
       - name: Bundle desktop app (${{ matrix.os }}/${{ matrix.arch }})
